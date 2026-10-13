@@ -19,7 +19,7 @@
             padding: 50px; 
             background: #fff; 
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.2); 
-            position: relative; /* 方便右上角 Invoice 绝对定位 */
+            position: relative; 
             box-sizing: border-box;
         }
 
@@ -37,7 +37,7 @@
             display: flex; 
             align-items: center; 
             margin-bottom: 40px; 
-            width: 75%; /* 避开右上角的字 */
+            width: 75%; 
         }
         .logo-section img { 
             max-width: 180px; 
@@ -76,7 +76,7 @@
         
         .meta-info { 
             width: 35%; 
-            margin-top: 25px; /* 对齐左边的地址 */
+            margin-top: 25px; 
         }
         .meta-table { 
             width: 100%; 
@@ -93,7 +93,7 @@
             width: 100%; 
             border-collapse: collapse; 
             font-size: 13px; 
-            border: 2px solid #1a4b7c; /* 外层深蓝粗边框 */
+            border: 2px solid #1a4b7c; 
             margin-bottom: 15px;
         }
         .invoice-table th { 
@@ -103,19 +103,18 @@
             font-weight: normal; 
             padding: 6px; 
             border: 1px solid #1a4b7c; 
-            border-top: 3px solid #000; /* ⚠️ 这里已经换成了黑色顶线 */
+            border-top: 3px solid #000; 
         }
         .invoice-table td { 
-            border: 1px solid #1a4b7c; /* 内部边框也是深蓝 */
+            border: 1px solid #1a4b7c; 
             padding: 10px; 
             vertical-align: top; 
         }
-        /* 模拟 Excel 里被拉高的大格子 */
         .invoice-table tbody td {
             height: 250px; 
         }
         
-        /* 表格下方区域 (Payment 和 Total 横向并排) */
+        /* 表格下方区域 */
         .bottom-section {
             display: flex;
             justify-content: space-between;
@@ -131,7 +130,6 @@
             width: 85px;
         }
         
-        /* 独立的 Total 框 (浅蓝底色深蓝边框) */
         .total-wrapper {
             display: flex;
             align-items: center;
@@ -168,22 +166,18 @@
             margin-bottom: 5px;
         }
 
-        /* 文本对齐小工具 */
         .text-right { text-align: right !important; }
         .text-center { text-align: center !important; }
         
-        /* 网页编辑状态样式 */
         .editable { outline: 1px dashed transparent; transition: background 0.3s; }
         .editable:hover, .editable:focus { background-color: #eef8ff; outline: 1px dashed #007bff; }
         
-        /* 操作按钮 */
         .controls { text-align: center; margin-bottom: 20px; }
         .btn { display: inline-block; padding: 10px 20px; margin: 0 10px; background: #007bff; color: #fff; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 14px; }
         .btn-print { background: #28a745; }
         .btn-add { background: #17a2b8; }
         .btn-danger { background: #dc3545; color: white; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; font-size: 12px; margin-left: 10px; }
         
-        /* 🖨️ 打印模式：隐藏所有多余的UI */
         @media print {
             body { background: #fff; padding: 0; }
             .page { box-shadow: none; border: none; padding: 0; max-width: 100%; }
@@ -205,7 +199,7 @@
 
     <div class="header">
         <div class="logo-section">
-            <img src="LOGO_BASE64_PLACEHOLDER" alt="Company Logo">
+            <img src="logo.png" alt="Company Logo">
         </div>
         <div class="company-info editable" contenteditable="true">
             <span class="company-name">RENTAK TEGAP SDN.BHD.</span> <span style="font-size: 10px;">(1597507-K)</span><br>
@@ -304,10 +298,10 @@
         <div>Prepared by :</div>
         <div class="signature-images">
             <div class="sign-box">
-                <img src="SIGNATURE_BASE64_PLACEHOLDER" alt="Signature" style="max-width: 110px; height: auto; object-fit: contain;">
+                <img src="signature.png" alt="Signature" style="max-width: 110px; height: auto; object-fit: contain;">
             </div>
             <div class="stamp-box">
-                <img src="STAMP_BASE64_PLACEHOLDER" alt="Company Stamp" style="max-width: 110px; height: auto; object-fit: contain;">
+                <img src="stamp.png" alt="Company Stamp" style="max-width: 110px; height: auto; object-fit: contain;">
             </div>
         </div>
     </div>
