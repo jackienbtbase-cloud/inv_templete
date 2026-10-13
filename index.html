@@ -80,7 +80,7 @@
             padding: 4px 0; 
         }
         
-        /* 统一表格线条样式 */
+        /* 表格样式恢复经典的深蓝色表头，统一细边框 */
         .invoice-table { 
             width: 100%; 
             border-collapse: collapse; 
@@ -89,15 +89,15 @@
             margin-bottom: 15px;
         }
         .invoice-table th { 
-            background: #b4c6e7; /* 统一成浅蓝色底色或您想要的表头底色 */
-            color: #000000; 
+            background: #1a4b7c; /* 经典的深蓝色表头 */
+            color: #ffffff;      /* 白色文字 */
             text-align: center; 
-            font-weight: bold; 
+            font-weight: normal; 
             padding: 8px 6px; 
-            border: 1px solid #1a4b7c; /* 统一所有表头边框 */
+            border: 1px solid #1a4b7c; 
         }
         .invoice-table td { 
-            border: 1px solid #1a4b7c; /* 统一所有单元格边框 */
+            border: 1px solid #1a4b7c; 
             padding: 10px; 
             vertical-align: top; 
         }
@@ -160,17 +160,17 @@
         .btn { display: inline-block; padding: 10px 20px; margin: 0 10px; background: #007bff; color: #fff; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 14px; }
         .btn-print { background: #28a745; }
         .btn-add { background: #17a2b8; }
-        .btn-danger { background: #dc3545; color: white; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; font-size: 12px; margin-left: 10px; }
         
         @media print {
             body { background: #fff; padding: 0; }
             .page { box-shadow: none; border: none; padding: 0; max-width: 100%; }
-            .controls, .btn-danger { display: none !important; }
+            .controls { display: none !important; }
             .editable { outline: none !important; background-color: transparent !important; }
             
+            /* 确保打印时深蓝色表头和白字完美保留 */
             .invoice-table th {
-                color: #000000 !important;
-                background-color: #b4c6e7 !important;
+                background-color: #1a4b7c !important;
+                color: #ffffff !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
@@ -260,10 +260,7 @@
                 </td>
                 <td class="editable text-right price" contenteditable="true" oninput="calculateTotal()">1,815.00</td>
                 <td class="editable text-center qty" contenteditable="true" oninput="calculateTotal()">1 TRIP</td>
-                <td class="text-right">
-                    <span class="amt">1,815.00</span>
-                    <button class="btn-danger" onclick="removeRow(this)" contenteditable="false">X</button>
-                </td>
+                <td class="text-right amt">1,815.00</td>
             </tr>
         </tbody>
     </table>
@@ -323,18 +320,9 @@
             </td>
             <td class="editable text-right price" contenteditable="true" oninput="calculateTotal()">0.00</td>
             <td class="editable text-center qty" contenteditable="true" oninput="calculateTotal()">1</td>
-            <td class="text-right">
-                <span class="amt">0.00</span>
-                <button class="btn-danger" onclick="removeRow(this)" contenteditable="false">X</button>
-            </td>
+            <td class="text-right amt">0.00</td>
         `;
         tbody.appendChild(tr);
-        calculateTotal();
-    }
-
-    function removeRow(btn) {
-        const row = btn.parentNode.parentNode;
-        row.parentNode.removeChild(row);
         calculateTotal();
     }
 
