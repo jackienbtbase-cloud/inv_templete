@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice Generator</title>
     <style>
-        /* 基础与页面设定 (完全模拟 A4 纸张风格) */
         body { 
             font-family: 'Calibri', 'Arial', sans-serif; 
             margin: 0; 
@@ -22,8 +21,6 @@
             position: relative; 
             box-sizing: border-box;
         }
-
-        /* 顶部大标题 Invoice */
         .main-title { 
             position: absolute; 
             top: 45px; 
@@ -31,8 +28,6 @@
             font-size: 38px; 
             font-weight: bold; 
         }
-
-        /* 头部：Logo 和 公司信息 */
         .header { 
             display: flex; 
             align-items: center; 
@@ -54,8 +49,6 @@
             font-weight: bold; 
             color: #000; 
         }
-        
-        /* 客户信息与发票信息 */
         .info-section { 
             display: flex; 
             justify-content: space-between; 
@@ -73,9 +66,8 @@
         .bill-to table td { 
             padding: 1px 0; 
         }
-        
         .meta-info { 
-            width: 35%; 
+            width: 38%; 
             margin-top: 25px; 
         }
         .meta-table { 
@@ -87,23 +79,21 @@
         .meta-table td { 
             padding: 4px 0; 
         }
-
-        /* 表格样式 */
         .invoice-table { 
             width: 100%; 
             border-collapse: collapse; 
             font-size: 13px; 
-            border: 2px solid #1a4b7c; 
+            border: 1px solid #1a4b7c; 
             margin-bottom: 15px;
         }
         .invoice-table th { 
             background: #1a4b7c; 
-            color: white; 
+            color: #ffffff; /* 确保网页端或开启背景打印时为白色 */
             text-align: center; 
-            font-weight: normal; 
+            font-weight: bold; 
             padding: 6px; 
             border: 1px solid #1a4b7c; 
-            border-top: 3px solid #000; 
+            border-top: 1px solid #1a4b7c; /* 去掉顶部的粗黑线，改成标准边框 */
         }
         .invoice-table td { 
             border: 1px solid #1a4b7c; 
@@ -113,8 +103,6 @@
         .invoice-table tbody td {
             height: 250px; 
         }
-        
-        /* 表格下方区域 */
         .bottom-section {
             display: flex;
             justify-content: space-between;
@@ -129,7 +117,6 @@
         .payment-info .label {
             width: 85px;
         }
-        
         .total-wrapper {
             display: flex;
             align-items: center;
@@ -145,8 +132,6 @@
             width: 100px;
             text-align: right;
         }
-
-        /* 签名与印章区 */
         .signature-section {
             font-size: 13px;
         }
@@ -165,13 +150,10 @@
         .stamp-box {
             margin-bottom: 5px;
         }
-
         .text-right { text-align: right !important; }
         .text-center { text-align: center !important; }
-        
         .editable { outline: 1px dashed transparent; transition: background 0.3s; }
         .editable:hover, .editable:focus { background-color: #eef8ff; outline: 1px dashed #007bff; }
-        
         .controls { text-align: center; margin-bottom: 20px; }
         .btn { display: inline-block; padding: 10px 20px; margin: 0 10px; background: #007bff; color: #fff; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 14px; }
         .btn-print { background: #28a745; }
@@ -183,6 +165,14 @@
             .page { box-shadow: none; border: none; padding: 0; max-width: 100%; }
             .controls, .btn-danger { display: none !important; }
             .editable { outline: none !important; background-color: transparent !important; }
+            
+            /* 关键：强制打印时表头文字变成清晰的纯黑色，防止被 PDF 转换器转成灰色 */
+            .invoice-table th {
+                color: #000000 !important;
+                background-color: #b4c6e7 !important; /* 也可以改成浅蓝或白色底，确保打印清晰 */
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
         }
     </style>
 </head>
@@ -190,11 +180,10 @@
 
 <div class="controls">
     <button class="btn btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
-    <button class="btn btn-add" onclick="addRow()">➕ Add Row (If Needed)</button>
+    <button class="btn btn-add" onclick="addRow()">➕ Add Row</button>
 </div>
 
 <div class="page">
-    
     <div class="main-title">Invoice</div>
 
     <div class="header">
@@ -227,9 +216,9 @@
         <div class="meta-info">
             <table class="meta-table">
                 <tr>
-                    <td style="width: 45%;">Invoice No</td>
-                    <td style="width: 5%;">:</td>
-                    <td class="editable" contenteditable="true">INV2610002</td>
+                    <td>Invoice No</td>
+                    <td>:</td>
+                    <td id="auto-invoice-no" class="editable" contenteditable="true">INV2610001</td>
                 </tr>
                 <tr><td colspan="3" style="height: 10px;"></td></tr>
                 <tr>
@@ -241,7 +230,7 @@
                 <tr>
                     <td>Date</td>
                     <td>:</td>
-                    <td class="editable" contenteditable="true">13.10.2026</td>
+                    <td id="auto-date" class="editable" contenteditable="true"></td>
                 </tr>
             </table>
         </div>
@@ -305,18 +294,30 @@
             </div>
         </div>
     </div>
-
 </div>
 
 <script>
+    window.onload = function() {
+        const today = new Date();
+        const dd = String(today.getDate()).padStart(2, '0');
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const yy = String(today.getFullYear()).slice(-2);
+        
+        document.getElementById('auto-date').innerText = `${dd}.${mm}.${today.getFullYear()}`;
+        document.getElementById('auto-invoice-no').innerText = `INV${yy}${mm}001`;
+        
+        calculateTotal();
+    };
+
     function addRow() {
         const tbody = document.getElementById('items-body');
+        const rowCount = tbody.rows.length + 1;
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="editable" contenteditable="true" style="height: auto;">
                 <div style="display: flex;">
-                    <div style="width: 25px; font-weight: bold;">-</div>
-                    <div>New Item</div>
+                    <div style="width: 25px; font-weight: bold;">${rowCount}</div>
+                    <div>New Item Description</div>
                 </div>
             </td>
             <td class="editable text-right price" contenteditable="true" oninput="calculateTotal()">0.00</td>
