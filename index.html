@@ -3,69 +3,191 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Invoice Generator - Rentak Tegap</title>
+    <title>Invoice Generator</title>
     <style>
-        body { font-family: Calibri, Arial, sans-serif; margin: 0; padding: 20px; background: #f4f4f4; color: #000; }
-        .invoice-box { max-width: 800px; margin: auto; padding: 40px; border: 1px solid #ccc; background: #fff; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        /* 基础与页面设定 (完全模拟 A4 纸张风格) */
+        body { 
+            font-family: 'Calibri', 'Arial', sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background: #e0e0e0; 
+            color: #000; 
+        }
+        .page { 
+            max-width: 800px; 
+            margin: auto; 
+            padding: 50px; 
+            background: #fff; 
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2); 
+            position: relative; /* 方便右上角 Invoice 绝对定位 */
+            box-sizing: border-box;
+        }
+
+        /* 顶部大标题 Invoice */
+        .main-title { 
+            position: absolute; 
+            top: 45px; 
+            right: 50px; 
+            font-size: 38px; 
+            font-weight: bold; 
+        }
+
+        /* 头部：Logo 和 公司信息 */
+        .header { 
+            display: flex; 
+            align-items: center; 
+            margin-bottom: 40px; 
+            width: 75%; /* 避开右上角的字 */
+        }
+        .logo-section img { 
+            max-width: 180px; 
+            height: auto; 
+            margin-right: 25px; 
+        }
+        .company-info { 
+            font-size: 11.5px; 
+            line-height: 1.4; 
+            color: #444; 
+        }
+        .company-name { 
+            font-size: 15px; 
+            font-weight: bold; 
+            color: #000; 
+        }
         
-        /* 顶部大标题 */
-        .main-title { text-align: center; font-size: 32px; font-weight: bold; margin-bottom: 20px; }
+        /* 客户信息与发票信息 */
+        .info-section { 
+            display: flex; 
+            justify-content: space-between; 
+            margin-bottom: 20px; 
+            font-size: 13px;
+        }
+        .bill-to { 
+            width: 60%; 
+            line-height: 1.6; 
+        }
+        .bill-to table { 
+            font-size: 13px; 
+            margin-top: 5px; 
+        }
+        .bill-to table td { 
+            padding: 1px 0; 
+        }
         
-        /* 头部布局 */
-        .header { display: flex; align-items: flex-start; margin-bottom: 30px; }
-        .logo-section { display: flex; align-items: center; }
-        .logo-section img { max-width: 150px; height: auto; margin-right: 20px; }
-        .company-info { font-size: 13px; line-height: 1.4; }
-        .company-name { font-size: 16px; font-weight: bold; }
-        .company-reg { font-size: 12px; font-weight: normal; }
-        
-        /* 客户与发票信息布局 */
-        .info-section { display: flex; justify-content: space-between; margin-bottom: 20px; }
-        .bill-to { width: 55%; }
-        .bill-to h3 { margin: 0 0 5px 0; font-size: 14px; font-weight: bold; }
-        .bill-to-content { line-height: 1.5; font-size: 14px; }
-        
-        .meta-info { width: 40%; }
-        .meta-table { width: 100%; border-collapse: collapse; font-size: 14px; font-weight: bold; }
-        .meta-table td { padding: 4px 0; }
-        .meta-table td:first-child { width: 30%; }
-        .meta-table td:nth-child(2) { width: 5%; text-align: center; }
-        
+        .meta-info { 
+            width: 35%; 
+            margin-top: 25px; /* 对齐左边的地址 */
+        }
+        .meta-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            font-size: 13px; 
+            font-weight: bold; 
+        }
+        .meta-table td { 
+            padding: 4px 0; 
+        }
+
         /* 表格样式 */
-        table.items { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px; }
-        table.items th, table.items td { border: 1px solid #000; padding: 8px; }
-        table.items th { background: #1a4b7c; color: white; text-align: center; font-weight: bold; }
-        table.items td { vertical-align: top; }
+        .invoice-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            font-size: 13px; 
+            border: 2px solid #1a4b7c; /* 外层深蓝粗边框 */
+            margin-bottom: 15px;
+        }
+        .invoice-table th { 
+            background: #1a4b7c; 
+            color: white; 
+            text-align: center; 
+            font-weight: normal; 
+            padding: 6px; 
+            border: 1px solid #1a4b7c; 
+            border-top: 3px solid #000; /* ⚠️ 这里已经换成了黑色顶线 */
+        }
+        .invoice-table td { 
+            border: 1px solid #1a4b7c; /* 内部边框也是深蓝 */
+            padding: 10px; 
+            vertical-align: top; 
+        }
+        /* 模拟 Excel 里被拉高的大格子 */
+        .invoice-table tbody td {
+            height: 250px; 
+        }
         
-        .total-row td { font-weight: bold; background: #b4c6e7; border: 1px solid #000; }
+        /* 表格下方区域 (Payment 和 Total 横向并排) */
+        .bottom-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            font-size: 13px;
+            margin-bottom: 40px;
+        }
+        .payment-info {
+            display: flex;
+            line-height: 1.5;
+        }
+        .payment-info .label {
+            width: 85px;
+        }
         
-        /* 文本对齐 */
+        /* 独立的 Total 框 (浅蓝底色深蓝边框) */
+        .total-wrapper {
+            display: flex;
+            align-items: center;
+        }
+        .total-wrapper span {
+            margin-right: 15px;
+        }
+        .total-box {
+            background-color: #b4c6e7;
+            border: 1px solid #1a4b7c;
+            padding: 4px 10px;
+            font-weight: bold;
+            width: 100px;
+            text-align: right;
+        }
+
+        /* 签名与印章区 */
+        .signature-section {
+            font-size: 13px;
+        }
+        .signature-images {
+            display: flex;
+            align-items: flex-end;
+            margin-top: 10px;
+        }
+        .sign-box {
+            border-bottom: 1px solid #000;
+            width: 140px;
+            text-align: center;
+            margin-right: 20px;
+            padding-bottom: 5px;
+        }
+        .stamp-box {
+            margin-bottom: 5px;
+        }
+
+        /* 文本对齐小工具 */
         .text-right { text-align: right !important; }
         .text-center { text-align: center !important; }
         
-        /* 编辑状态样式 */
+        /* 网页编辑状态样式 */
         .editable { outline: 1px dashed transparent; transition: background 0.3s; }
         .editable:hover, .editable:focus { background-color: #eef8ff; outline: 1px dashed #007bff; }
         
-        /* 底部付款信息与签名 */
-        .footer-section { margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 14px; }
-        .payment-table td { padding: 2px 5px 2px 0; line-height: 1.5; }
-        
-        .prepared-by { margin-top: 40px; font-size: 14px; }
-        .prepared-by .signature-line { margin-top: 40px; border-top: 1px solid #000; width: 150px; }
-
-        /* 按钮与控制区 */
+        /* 操作按钮 */
         .controls { text-align: center; margin-bottom: 20px; }
         .btn { display: inline-block; padding: 10px 20px; margin: 0 10px; background: #007bff; color: #fff; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 14px; }
         .btn-print { background: #28a745; }
         .btn-add { background: #17a2b8; }
-        .btn-danger { background: #dc3545; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; }
+        .btn-danger { background: #dc3545; color: white; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; font-size: 12px; margin-left: 10px; }
         
-        /* 打印模式（隐藏按钮，去掉所有编辑提示框） */
+        /* 🖨️ 打印模式：隐藏所有多余的UI */
         @media print {
             body { background: #fff; padding: 0; }
-            .invoice-box { box-shadow: none; border: none; padding: 0; max-width: 100%; }
-            .controls, .btn-danger, .action-col { display: none !important; }
+            .page { box-shadow: none; border: none; padding: 0; max-width: 100%; }
+            .controls, .btn-danger { display: none !important; }
             .editable { outline: none !important; background-color: transparent !important; }
         }
     </style>
@@ -74,20 +196,19 @@
 
 <div class="controls">
     <button class="btn btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
-    <button class="btn btn-add" onclick="addRow()">➕ Add New Row</button>
+    <button class="btn btn-add" onclick="addRow()">➕ Add Row (If Needed)</button>
 </div>
 
-<div class="invoice-box">
+<div class="page">
     
-    <div class="main-title editable" contenteditable="true">Invoice</div>
+    <div class="main-title">Invoice</div>
 
     <div class="header">
         <div class="logo-section">
-            <!-- 这是从你的 Excel 里提取出来的真实 RT Logo！它被转成了 Base64 代码，永远不会丢失 -->
-            <img src="data:image/jpeg;base64,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" alt="Company Logo">
+            <img src="LOGO_BASE64_PLACEHOLDER" alt="Company Logo">
         </div>
         <div class="company-info editable" contenteditable="true">
-            <span class="company-name">RENTAK TEGAP SDN.BHD.</span> <span class="company-reg">(1597507-K)</span><br>
+            <span class="company-name">RENTAK TEGAP SDN.BHD.</span> <span style="font-size: 10px;">(1597507-K)</span><br>
             A03-12, Sphere Damansara , Jalan PJU 10/9, Prima Damansara,<br>
             47830 Petaling Jaya, Selangor<br>
             Tel: 03-6150 1701 &nbsp; Email: rtss.sdnbhd@gmail.com
@@ -96,29 +217,33 @@
 
     <div class="info-section">
         <div class="bill-to">
-            <h3>To:</h3>
-            <div class="bill-to-content editable" contenteditable="true">
+            <div style="margin-bottom: 8px;"><strong>To:</strong></div>
+            <div class="editable" contenteditable="true">
                 <strong>Protasco Trading Sdn. Bhd.</strong><br>
                 No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
-                46150 Petaling Jaya, Selangor, Malaysia.<br><br>
-                Attn&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: Ms Julie<br>
-                E-mail&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: julie@protascotrading.com.my<br>
-                Contact&nbsp;&nbsp;&nbsp;: (603)7782 1688/ 7783 2688
+                46150 Petaling Jaya, Selangor, Malaysia.<br>
+                <table>
+                    <tr><td style="width: 70px;">Attn</td><td>: Ms Julie</td></tr>
+                    <tr><td>E-mail</td><td>: julie@protascotrading.com.my</td></tr>
+                    <tr><td>Contact</td><td>: (603)7782 1688/ 7783 2688</td></tr>
+                </table>
             </div>
         </div>
 
         <div class="meta-info">
             <table class="meta-table">
                 <tr>
-                    <td>Invoice No</td>
-                    <td>:</td>
+                    <td style="width: 45%;">Invoice No</td>
+                    <td style="width: 5%;">:</td>
                     <td class="editable" contenteditable="true">INV2610002</td>
                 </tr>
+                <tr><td colspan="3" style="height: 10px;"></td></tr>
                 <tr>
                     <td>P.O. No</td>
                     <td>:</td>
                     <td class="editable" contenteditable="true">PO04306</td>
                 </tr>
+                <tr><td colspan="3" style="height: 10px;"></td></tr>
                 <tr>
                     <td>Date</td>
                     <td>:</td>
@@ -128,57 +253,63 @@
         </div>
     </div>
 
-    <table class="items" id="invoice-items">
+    <table class="invoice-table" id="invoice-items">
         <thead>
             <tr>
-                <th width="50%">Description</th>
-                <th width="15%">U/ Price (RM)</th>
-                <th width="15%">Quantity</th>
-                <th width="15%">Amt (RM)</th>
-                <th width="5%" class="action-col"></th>
+                <th style="width: 50%">Description</th>
+                <th style="width: 15%">U/ Price (RM)</th>
+                <th style="width: 15%">Quantity</th>
+                <th style="width: 20%">Amt (RM)</th>
             </tr>
         </thead>
         <tbody id="items-body">
             <tr>
                 <td class="editable" contenteditable="true">
-                    TRANSPORT FEES<br><br>
-                    ITEM - FIBORCEL COLLULOSE FIBER<br>
-                    QTY - 11MT (20BAG)
+                    <div style="display: flex;">
+                        <div style="width: 25px; font-weight: bold;">1</div>
+                        <div>
+                            TRANSPORT FEES<br><br>
+                            ITEM - FIBORCEL COLLULOSE FIBER<br>
+                            QTY - 11MT (20BAG)
+                        </div>
+                    </div>
                 </td>
                 <td class="editable text-right price" contenteditable="true" oninput="calculateTotal()">1,815.00</td>
                 <td class="editable text-center qty" contenteditable="true" oninput="calculateTotal()">1 TRIP</td>
-                <td class="editable text-right amt" contenteditable="true">1,815.00</td>
-                <td class="text-center action-col"><button class="btn-danger" onclick="removeRow(this)">X</button></td>
+                <td class="text-right">
+                    <span class="amt">1,815.00</span>
+                    <button class="btn-danger" onclick="removeRow(this)" contenteditable="false">X</button>
+                </td>
             </tr>
         </tbody>
-        <tfoot>
-            <tr class="total-row">
-                <td colspan="3" class="text-right">Total (RM)</td>
-                <td class="text-right" id="grand-total">1,815.00</td>
-                <td class="action-col"></td>
-            </tr>
-        </tfoot>
     </table>
 
-    <div class="footer-section">
+    <div class="bottom-section">
         <div class="payment-info">
-            <table class="payment-table">
-                <tr>
-                    <td valign="top" style="font-weight: bold;">Payment</td>
-                    <td valign="top" style="font-weight: bold;">:</td>
-                    <td>
-                        Please bank in to<br>
-                        <strong>RENTAK TEGAP SDN. BHD.</strong><br>
-                        MBB 5648 7460 7583
-                    </td>
-                </tr>
-            </table>
+            <div class="label">Payment</div>
+            <div>
+                : Please bank in to<br>
+                <strong>RENTAK TEGAP SDN. BHD.</strong><br>
+                <strong>MBB 5648 7460 7583</strong>
+            </div>
+        </div>
+        
+        <div class="total-wrapper">
+            <span>Total (RM)</span>
+            <div class="total-box" id="grand-total">1,815.00</div>
         </div>
     </div>
     
-    <div class="prepared-by">
-        Prepared by :
-        <div class="signature-line"></div>
+    <div class="signature-section">
+        <div>Prepared by :</div>
+        <div class="signature-images">
+            <div class="sign-box">
+                <img src="SIGNATURE_BASE64_PLACEHOLDER" alt="Signature" style="max-width: 110px; height: auto; object-fit: contain;">
+            </div>
+            <div class="stamp-box">
+                <img src="STAMP_BASE64_PLACEHOLDER" alt="Company Stamp" style="max-width: 110px; height: auto; object-fit: contain;">
+            </div>
+        </div>
     </div>
 
 </div>
@@ -188,11 +319,18 @@
         const tbody = document.getElementById('items-body');
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td class="editable" contenteditable="true">New Item Description</td>
+            <td class="editable" contenteditable="true" style="height: auto;">
+                <div style="display: flex;">
+                    <div style="width: 25px; font-weight: bold;">-</div>
+                    <div>New Item</div>
+                </div>
+            </td>
             <td class="editable text-right price" contenteditable="true" oninput="calculateTotal()">0.00</td>
             <td class="editable text-center qty" contenteditable="true" oninput="calculateTotal()">1</td>
-            <td class="editable text-right amt" contenteditable="true">0.00</td>
-            <td class="text-center action-col"><button class="btn-danger" onclick="removeRow(this)">X</button></td>
+            <td class="text-right">
+                <span class="amt">0.00</span>
+                <button class="btn-danger" onclick="removeRow(this)" contenteditable="false">X</button>
+            </td>
         `;
         tbody.appendChild(tr);
         calculateTotal();
@@ -220,11 +358,9 @@
             if (!isNaN(price) && !isNaN(qty)) {
                 const rowTotal = price * qty;
                 amtCell.innerText = rowTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-            }
-            
-            const amt = parseFloat(amtCell.innerText.replace(/,/g, ''));
-            if (!isNaN(amt)) {
-                grandTotal += amt;
+                grandTotal += rowTotal;
+            } else {
+                amtCell.innerText = "0.00";
             }
         });
 
