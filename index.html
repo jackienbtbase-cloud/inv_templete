@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Invoice Generator</title>
+    <title>Invoice Generator - Rentak Tegap</title>
     <style>
         body { 
             font-family: 'Calibri', 'Arial', sans-serif; 
@@ -11,10 +11,57 @@
             padding: 20px; 
             background: #e0e0e0; 
             color: #000; 
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
         }
+        
+        /* 侧边控制面板样式 */
+        .sidebar {
+            width: 300px;
+            background: #ffffff;
+            padding: 20px;
+            margin-right: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            font-size: 13px;
+            position: sticky;
+            top: 20px;
+        }
+        .sidebar h3 {
+            margin-top: 0;
+            font-size: 16px;
+            color: #1a4b7c;
+            border-bottom: 2px solid #1a4b7c;
+            padding-bottom: 8px;
+        }
+        .sidebar label {
+            display: block;
+            margin-top: 12px;
+            font-weight: bold;
+            color: #333;
+        }
+        .sidebar select, .sidebar input, .sidebar textarea {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .legend-box {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #17a2b8;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        /* 发票主体样式 */
         .page { 
-            max-width: 800px; 
-            margin: auto; 
+            width: 800px; 
             padding: 50px; 
             background: #fff; 
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.2); 
@@ -80,7 +127,6 @@
             padding: 4px 0; 
         }
         
-        /* 表格样式恢复经典的深蓝色表头，统一细边框 */
         .invoice-table { 
             width: 100%; 
             border-collapse: collapse; 
@@ -89,8 +135,8 @@
             margin-bottom: 15px;
         }
         .invoice-table th { 
-            background: #1a4b7c; /* 经典的深蓝色表头 */
-            color: #ffffff;      /* 白色文字 */
+            background: #1a4b7c; 
+            color: #ffffff;      
             text-align: center; 
             font-weight: normal; 
             padding: 8px 6px; 
@@ -102,7 +148,7 @@
             vertical-align: top; 
         }
         .invoice-table tbody td {
-            height: 250px; 
+            height: 200px; 
         }
 
         .bottom-section {
@@ -154,20 +200,21 @@
         }
         .text-right { text-align: right !important; }
         .text-center { text-align: center !important; }
+        
+        /* 交互提示样式 */
         .editable { outline: 1px dashed transparent; transition: background 0.3s; }
         .editable:hover, .editable:focus { background-color: #eef8ff; outline: 1px dashed #007bff; }
-        .controls { text-align: center; margin-bottom: 20px; }
-        .btn { display: inline-block; padding: 10px 20px; margin: 0 10px; background: #007bff; color: #fff; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 14px; }
+        
+        .controls { margin-top: 15px; }
+        .btn { display: block; width: 100%; padding: 10px; margin-top: 10px; background: #007bff; color: #fff; text-align: center; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 14px; box-sizing: border-box;}
         .btn-print { background: #28a745; }
         .btn-add { background: #17a2b8; }
         
         @media print {
-            body { background: #fff; padding: 0; }
-            .page { box-shadow: none; border: none; padding: 0; max-width: 100%; }
-            .controls { display: none !important; }
+            body { background: #fff; padding: 0; display: block; }
+            .sidebar, .controls { display: none !important; }
+            .page { box-shadow: none; border: none; padding: 0; width: 100%; }
             .editable { outline: none !important; background-color: transparent !important; }
-            
-            /* 确保打印时深蓝色表头和白字完美保留 */
             .invoice-table th {
                 background-color: #1a4b7c !important;
                 color: #ffffff !important;
@@ -179,11 +226,29 @@
 </head>
 <body>
 
-<div class="controls">
-    <button class="btn btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
-    <button class="btn btn-add" onclick="addRow()">➕ Add Row</button>
+<!-- 左侧控制与选项面板 -->
+<div class="sidebar">
+    <h3>⚙️ Invoice Control Panel</h3>
+    
+    <label for="client-select">📂 选择公司模板 (Select Client):</label>
+    <select id="client-select" onchange="loadClientData()">
+        <option value="protasco">Protasco Trading Sdn. Bhd.</option>
+        <option value="client2">-- 点击添加新公司模板 --</option>
+    </select>
+
+    <div class="legend-box">
+        📌 <b>操作指南：</b><br>
+        • <b>固定区域</b>：公司抬头、银行户口、公司 LOGO 及印章由系统自动锁定。<br>
+        • <b>可填/可改区域</b>：页面中带<b>虚线框</b>的文字（如公司名称、Attn、PO No、金额等）都可以直接点击修改。
+    </div>
+
+    <div class="controls">
+        <button class="btn btn-add" onclick="addRow()">➕ 增加项目行 (Add Row)</button>
+        <button class="btn btn-print" onclick="window.print()">🖨️ 打印 / 保存 PDF</button>
+    </div>
 </div>
 
+<!-- 右侧发票主体 -->
 <div class="page">
     <div class="main-title">Invoice</div>
 
@@ -191,7 +256,7 @@
         <div class="logo-section">
             <img src="logo.png" alt="Company Logo">
         </div>
-        <div class="company-info editable" contenteditable="true">
+        <div class="company-info">
             <span class="company-name">RENTAK TEGAP SDN.BHD.</span> <span style="font-size: 10px;">(1597507-K)</span><br>
             A03-12, Sphere Damansara , Jalan PJU 10/9, Prima Damansara,<br>
             47830 Petaling Jaya, Selangor<br>
@@ -202,7 +267,7 @@
     <div class="info-section">
         <div class="bill-to">
             <div style="margin-bottom: 8px;"><strong>To:</strong></div>
-            <div class="editable" contenteditable="true">
+            <div id="bill-to-content" class="editable" contenteditable="true">
                 <strong>Protasco Trading Sdn. Bhd.</strong><br>
                 No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
                 46150 Petaling Jaya, Selangor, Malaysia.<br>
@@ -295,6 +360,26 @@
 </div>
 
 <script>
+    // 预设公司模板数据，以后可以随时在这里加更多公司
+    const clientTemplates = {
+        "protasco": `<strong>Protasco Trading Sdn. Bhd.</strong><br>
+No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
+46150 Petaling Jaya, Selangor, Malaysia.<br>
+<table>
+    <tr><td style="width: 70px;">Attn</td><td>: Ms Julie</td></tr>
+    <tr><td>E-mail</td><td>: julie@protascotrading.com.my</td></tr>
+    <tr><td>Contact</td><td>: (603)7782 1688/ 7783 2688</td></tr>
+</table>`,
+        "client2": `<strong>在这里输入第二家公司名称</strong><br>
+公司地址第一行<br>
+公司地址第二行<br>
+<table>
+    <tr><td style="width: 70px;">Attn</td><td>: 负责人名字</td></tr>
+    <tr><td>E-mail</td><td>: email@company.com</td></tr>
+    <tr><td>Contact</td><td>: 电话号码</td></tr>
+</table>`
+    };
+
     window.onload = function() {
         const today = new Date();
         const dd = String(today.getDate()).padStart(2, '0');
@@ -306,6 +391,14 @@
         
         calculateTotal();
     };
+
+    function loadClientData() {
+        const select = document.getElementById('client-select');
+        const val = select.value;
+        if (clientTemplates[val]) {
+            document.getElementById('bill-to-content').innerHTML = clientTemplates[val];
+        }
+    }
 
     function addRow() {
         const tbody = document.getElementById('items-body');
