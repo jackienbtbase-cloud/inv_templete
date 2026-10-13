@@ -79,6 +79,8 @@
         .meta-table td { 
             padding: 4px 0; 
         }
+        
+        /* 统一表格线条样式 */
         .invoice-table { 
             width: 100%; 
             border-collapse: collapse; 
@@ -87,22 +89,22 @@
             margin-bottom: 15px;
         }
         .invoice-table th { 
-            background: #1a4b7c; 
-            color: #ffffff; /* 确保网页端或开启背景打印时为白色 */
+            background: #b4c6e7; /* 统一成浅蓝色底色或您想要的表头底色 */
+            color: #000000; 
             text-align: center; 
             font-weight: bold; 
-            padding: 6px; 
-            border: 1px solid #1a4b7c; 
-            border-top: 1px solid #1a4b7c; /* 去掉顶部的粗黑线，改成标准边框 */
+            padding: 8px 6px; 
+            border: 1px solid #1a4b7c; /* 统一所有表头边框 */
         }
         .invoice-table td { 
-            border: 1px solid #1a4b7c; 
+            border: 1px solid #1a4b7c; /* 统一所有单元格边框 */
             padding: 10px; 
             vertical-align: top; 
         }
         .invoice-table tbody td {
             height: 250px; 
         }
+
         .bottom-section {
             display: flex;
             justify-content: space-between;
@@ -166,10 +168,9 @@
             .controls, .btn-danger { display: none !important; }
             .editable { outline: none !important; background-color: transparent !important; }
             
-            /* 关键：强制打印时表头文字变成清晰的纯黑色，防止被 PDF 转换器转成灰色 */
             .invoice-table th {
                 color: #000000 !important;
-                background-color: #b4c6e7 !important; /* 也可以改成浅蓝或白色底，确保打印清晰 */
+                background-color: #b4c6e7 !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
