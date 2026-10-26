@@ -236,6 +236,15 @@
         <option value="client2">-- 点击添加新公司模板 --</option>
     </select>
 
+    <label for="po-file">📥 上传 PO 扫描件 (PDF / 图片):</label>
+    <input type="file" id="po-file" accept="application/pdf,image/*" onchange="handlePOFile(this.files[0])">
+    <div id="ocr-status" style="margin-top:8px;font-size:12px;color:#555;"></div>
+    <details id="ocr-debug" style="display:none;margin-top:6px;">
+        <summary style="cursor:pointer;font-size:12px;color:#1a4b7c;">查看识别原文 (识别不准时可核对)</summary>
+        <textarea id="ocr-text" rows="8" style="font-family:monospace;"></textarea>
+        <button class="btn btn-add" type="button" onclick="applyPOText(document.getElementById('ocr-text').value)">🔄 用修改后的文字重新填入</button>
+    </details>
+
     <div class="legend-box">
         📌 <b>操作指南：</b><br>
         • <b>固定区域</b>：公司抬头、银行户口、公司 LOGO 及印章由系统自动锁定。<br>
@@ -290,7 +299,7 @@
                 <tr>
                     <td>P.O. No</td>
                     <td>:</td>
-                    <td class="editable" contenteditable="true">PO04306</td>
+                    <td id="po-no" class="editable" contenteditable="true">PO04306</td>
                 </tr>
                 <tr><td colspan="3" style="height: 10px;"></td></tr>
                 <tr>
@@ -391,6 +400,165 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
         
         calculateTotal();
     };
+
+    // ================= PO 扫描件识别 =================
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('无法加载 ' + src));
+            document.head.appendChild(s);
+        });
+    }
+
+    function setStatus(msg, color) {
+        const el = document.getElementById('ocr-status');
+        el.style.color = color || '#555';
+        el.innerText = msg;
+    }
+
+    async function fileToCanvas(file) {
+        if (file.type === 'application/pdf') {
+            if (!window.pdfjsLib) {
+                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            }
+            const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+            const page = await pdf.getPage(1);
+            const viewport = page.getViewport({ scale: 3 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width; canvas.height = viewport.height;
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+            return canvas;
+        }
+        // 图片
+        const img = await new Promise((res, rej) => {
+            const i = new Image();
+            i.onload = () => res(i); i.onerror = rej;
+            i.src = URL.createObjectURL(file);
+        });
+        const scale = img.width < 1800 ? 2 : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale; canvas.height = img.height * scale;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        return canvas;
+    }
+
+    async function handlePOFile(file) {
+        if (!file) return;
+        try {
+            setStatus('⏳ 正在读取文件...');
+            const canvas = await fileToCanvas(file);
+            if (!window.Tesseract) {
+                setStatus('⏳ 正在加载识别引擎 (首次需要几秒)...');
+                await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+            }
+            const result = await Tesseract.recognize(canvas, 'eng', {
+                logger: m => {
+                    if (m.status === 'recognizing text') setStatus('🔍 正在识别文字... ' + Math.round(m.progress * 100) + '%');
+                }
+            });
+            const text = result.data.text;
+            document.getElementById('ocr-text').value = text;
+            document.getElementById('ocr-debug').style.display = 'block';
+            applyPOText(text);
+        } catch (e) {
+            console.error(e);
+            setStatus('❌ 识别失败：' + e.message, '#c00');
+        }
+    }
+
+    const fmt = n => n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+    // 解析 PO 文字 (纯函数，方便测试)
+    function parsePOText(text) {
+        const out = { po: null, company: null, address: null, items: [] };
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+        // PO 号码
+        let m = text.match(/PO\s*NO\s*[:：]?\s*(PO\s*\d{3,})/i) || text.match(/\b(PO\s?\d{4,})\b/i);
+        if (m) out.po = m[1].replace(/\s+/g, '').toUpperCase();
+
+        // 开单公司 (PO 抬头的第一个 SDN BHD)
+        for (const l of lines.slice(0, 8)) {
+            const cm = l.match(/([A-Z][A-Za-z0-9 &.\-]{2,}?\s+(?:SDN\.?\s*BHD\.?))/i);
+            if (cm) { out.company = cm[1].replace(/\s+/g, ' ').trim(); break; }
+        }
+        // 地址 (Operation Office 之后)
+        const am = text.match(/Operation\s*Office\s*[:：]?\s*([\s\S]*?)(?=\s+T\s*[.:]|\n\s*\n|Factory)/i);
+        if (am) out.address = am[1].replace(/\s+/g, ' ').trim().replace(/[,.\s]+$/, '');
+
+        // 项目行：以序号开头，包含金额
+        const endIdx = lines.findIndex(l => /Ringgit|Total\s*Amount/i.test(l));
+        const startIdx = lines.findIndex(l => /Item\b.*Description/i.test(l));
+        const body = lines.slice(startIdx >= 0 ? startIdx + 1 : 0, endIdx >= 0 ? endIdx : undefined);
+        for (const l of body) {
+            const nums = (l.match(/\d[\d,]*\.\d{2,3}/g) || []);
+            if (!/^\s*\d+\s+/.test(l) || nums.length < 3) continue;
+            // 数量 (3位小数) / 单价 / 折扣 / 金额
+            const qtyStr = nums.find(n => /\.\d{3}$/.test(n)) || nums[0];
+            const twoDec = nums.filter(n => /\.\d{2}$/.test(n) && n !== qtyStr);
+            const price = parseFloat((twoDec[0] || '0').replace(/,/g, ''));
+            const qty = parseFloat(qtyStr.replace(/,/g, ''));
+            const firstNumPos = l.indexOf(qtyStr);
+            let desc = l.slice(0, firstNumPos).replace(/^\s*\d+\s+/, '').trim();
+            desc = desc.replace(/^[A-Z]{2,}-[A-Z0-9]+\s+/, '');   // 去掉货品代码 如 TPT-RF
+            desc = desc.replace(/[|_]+/g, '').trim();
+            out.items.push({ desc, qty, price });
+        }
+        return out;
+    }
+
+    function applyPOText(text) {
+        const r = parsePOText(text);
+        const filled = [];
+
+        if (r.po) { document.getElementById('po-no').innerText = r.po; filled.push('PO No'); }
+
+        if (r.company) {
+            const addr = r.address ? r.address : '(请填写地址)';
+            document.getElementById('bill-to-content').innerHTML =
+                `<strong>${r.company}</strong><br>${addr}<br>
+<table>
+    <tr><td style="width: 70px;">Attn</td><td>: </td></tr>
+    <tr><td>E-mail</td><td>: </td></tr>
+    <tr><td>Contact</td><td>: </td></tr>
+</table>`;
+            filled.push('公司');
+        }
+
+        if (r.items.length) {
+            const tbody = document.getElementById('items-body');
+            tbody.innerHTML = '';
+            r.items.forEach((it, i) => {
+                const isTransport = /^TRANSPORT/i.test(it.desc);
+                const itemName = it.desc.replace(/^TRANSPORT\s*[-–:]?\s*/i, '').trim();
+                const descHtml = isTransport
+                    ? `TRANSPORT FEES<br><br>ITEM - ${itemName}<br>QTY - `
+                    : it.desc;
+                const qtyText = isTransport ? `${it.qty % 1 === 0 ? it.qty : it.qty} TRIP` : String(it.qty % 1 === 0 ? it.qty : it.qty);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="editable" contenteditable="true"${i > 0 ? ' style="height:auto;"' : ''}>
+                        <div style="display: flex;">
+                            <div style="width: 25px; font-weight: bold;">${i + 1}</div>
+                            <div>${descHtml}</div>
+                        </div>
+                    </td>
+                    <td class="editable text-right price" contenteditable="true" oninput="calculateTotal()">${fmt(it.price)}</td>
+                    <td class="editable text-center qty" contenteditable="true" oninput="calculateTotal()">${qtyText}</td>
+                    <td class="text-right amt">0.00</td>`;
+                tbody.appendChild(tr);
+            });
+            calculateTotal();
+            filled.push(`${r.items.length} 个项目`);
+        }
+
+        if (filled.length) {
+            setStatus('✅ 已自动填入：' + filled.join('、') + '。请核对虚线框内容，尤其是 Attn / 货物数量(QTY)。', '#1a7f37');
+        } else {
+            setStatus('⚠️ 没识别到有效内容，请换更清晰的扫描件，或在下方修改识别原文后重试。', '#b36b00');
+        }
+    }
 
     function loadClientData() {
         const select = document.getElementById('client-select');
