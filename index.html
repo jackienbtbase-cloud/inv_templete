@@ -209,6 +209,9 @@
         .btn { display: block; width: 100%; padding: 10px; margin-top: 10px; background: #007bff; color: #fff; text-align: center; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 14px; box-sizing: border-box;}
         .btn-print { background: #28a745; }
         .btn-add { background: #17a2b8; }
+        .btn-save { background: #6f42c1; }
+        .btn-del { background: #dc3545; padding: 6px; font-size: 12px; }
+        .bill-to table td:last-child { min-width: 260px; height: 22px; }
         
         @media print {
             body { background: #fff; padding: 0; display: block; }
@@ -230,11 +233,10 @@
 <div class="sidebar">
     <h3>⚙️ Invoice Control Panel</h3>
     
-    <label for="client-select">📂 选择公司模板 (Select Client):</label>
-    <select id="client-select" onchange="loadClientData()">
-        <option value="protasco">Protasco Trading Sdn. Bhd.</option>
-        <option value="client2">-- 点击添加新公司模板 --</option>
-    </select>
+    <label for="client-select">📂 选择联系人 (Select Client):</label>
+    <select id="client-select" onchange="loadClientData()"></select>
+    <button class="btn btn-save" type="button" onclick="saveClient()">💾 保存当前客户为联系人</button>
+    <button class="btn btn-del" type="button" onclick="deleteClient()">🗑️ 删除所选联系人</button>
 
     <label for="po-file">📥 上传 PO 扫描件 (PDF / 图片):</label>
     <input type="file" id="po-file" accept="application/pdf,image/*" onchange="handlePOFile(this.files[0])">
@@ -373,15 +375,56 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
     <tr><td>E-mail</td><td>: julie@protascotrading.com.my</td></tr>
     <tr><td>Contact</td><td>: (603)7782 1688/ 7783 2688</td></tr>
 </table>`,
-        "client2": `<strong>在这里输入第二家公司名称</strong><br>
-公司地址第一行<br>
-公司地址第二行<br>
-<table>
-    <tr><td style="width: 70px;">Attn</td><td>: 负责人名字</td></tr>
-    <tr><td>E-mail</td><td>: email@company.com</td></tr>
-    <tr><td>Contact</td><td>: 电话号码</td></tr>
-</table>`
     };
+
+    // ===== 联系人保存 (存在本浏览器 localStorage) =====
+    function getSaved() {
+        try { return JSON.parse(localStorage.getItem('rt_clients') || '{}'); } catch (e) { return {}; }
+    }
+    function setSaved(obj) {
+        try { localStorage.setItem('rt_clients', JSON.stringify(obj)); return true; } catch (e) { return false; }
+    }
+    const BUILTIN_NAMES = { protasco: 'Protasco Trading Sdn. Bhd.' };
+    const normName = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    function refreshClientSelect(selectedVal) {
+        const sel = document.getElementById('client-select');
+        sel.innerHTML = '';
+        Object.keys(BUILTIN_NAMES).forEach(k => sel.add(new Option(BUILTIN_NAMES[k], k)));
+        Object.keys(getSaved()).forEach(name => sel.add(new Option('⭐ ' + name, 'saved:' + name)));
+        if (selectedVal) sel.value = selectedVal;
+    }
+    function currentClientName() {
+        const strong = document.querySelector('#bill-to-content strong');
+        if (strong && strong.innerText.trim()) return strong.innerText.trim();
+        return (document.getElementById('bill-to-content').innerText.split('\n')[0] || '').trim();
+    }
+    function saveClient() {
+        const name = currentClientName();
+        if (!name) { alert('请先填写公司名称'); return; }
+        const saved = getSaved();
+        if (saved[name] && !confirm('「' + name + '」已存在，要覆盖吗？')) return;
+        saved[name] = document.getElementById('bill-to-content').innerHTML;
+        if (!setSaved(saved)) { alert('保存失败：浏览器不允许存储'); return; }
+        refreshClientSelect('saved:' + name);
+        setStatus('✅ 已保存联系人：' + name, '#1a7f37');
+    }
+    function deleteClient() {
+        const val = document.getElementById('client-select').value;
+        if (!val.startsWith('saved:')) { alert('只能删除自己保存的联系人'); return; }
+        const name = val.slice(6);
+        if (!confirm('确定删除「' + name + '」？')) return;
+        const saved = getSaved(); delete saved[name]; setSaved(saved);
+        refreshClientSelect('protasco');
+        loadClientData();
+    }
+    function findSavedContact(company) {
+        const n = normName(company);
+        const saved = getSaved();
+        for (const name of Object.keys(saved)) if (normName(name) === n) return { name, html: saved[name] };
+        for (const k of Object.keys(BUILTIN_NAMES)) if (normName(BUILTIN_NAMES[k]) === n) return { name: BUILTIN_NAMES[k], html: clientTemplates[k] };
+        return null;
+    }
 
     window.onload = function() {
         const today = new Date();
@@ -392,6 +435,7 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
         document.getElementById('auto-date').innerText = `${dd}.${mm}.${today.getFullYear()}`;
         document.getElementById('auto-invoice-no').innerText = `INV${yy}${mm}001`;
         
+        refreshClientSelect('protasco');
         calculateTotal();
     };
 
@@ -509,15 +553,21 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
         if (r.po) { document.getElementById('po-no').innerText = r.po; filled.push('PO No'); }
 
         if (r.company) {
-            const addr = r.address ? r.address : '(请填写地址)';
-            document.getElementById('bill-to-content').innerHTML =
-                `<strong>${r.company}</strong><br>${addr}<br>
+            const known = findSavedContact(r.company);
+            if (known) {
+                document.getElementById('bill-to-content').innerHTML = known.html;
+                filled.push('公司 (已用保存的联系人资料)');
+            } else {
+                const addr = r.address ? r.address : '(请填写地址)';
+                document.getElementById('bill-to-content').innerHTML =
+                    `<strong>${r.company}</strong><br>${addr}<br>
 <table>
     <tr><td style="width: 70px;">Attn</td><td>: </td></tr>
     <tr><td>E-mail</td><td>: </td></tr>
     <tr><td>Contact</td><td>: </td></tr>
 </table>`;
-            filled.push('公司');
+                filled.push('公司 (新客户：补完 Attn 等资料后点「保存当前客户为联系人」)');
+            }
         }
 
         if (r.items.length) {
@@ -557,7 +607,10 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
     function loadClientData() {
         const select = document.getElementById('client-select');
         const val = select.value;
-        if (clientTemplates[val]) {
+        if (val.startsWith('saved:')) {
+            const html = getSaved()[val.slice(6)];
+            if (html) document.getElementById('bill-to-content').innerHTML = html;
+        } else if (clientTemplates[val]) {
             document.getElementById('bill-to-content').innerHTML = clientTemplates[val];
         }
     }
