@@ -213,7 +213,14 @@
         .btn-del { background: #dc3545; padding: 6px; font-size: 12px; }
         .bill-to table td:last-child { min-width: 260px; height: 22px; }
         
+        .invoice-table { table-layout: fixed; }
+
+        @page { size: A4; margin: 12mm; }
+
         @media print {
+            html, body { width: auto; }
+            .invoice-table { width: 100% !important; table-layout: fixed; border-right: 1px solid #1a4b7c; }
+            .invoice-table th:last-child, .invoice-table td:last-child { border-right: 1px solid #1a4b7c !important; }
             body { background: #fff; padding: 0; display: block; }
             .sidebar, .controls { display: none !important; }
             .page { box-shadow: none; border: none; padding: 0; width: 100%; }
