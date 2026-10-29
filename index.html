@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice Generator - Rentak Tegap</title>
+    <!-- 引入 Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { 
             font-family: 'Calibri', 'Arial', sans-serif; 
@@ -242,8 +244,8 @@
     
     <label for="client-select">📂 选择联系人 (Select Client):</label>
     <select id="client-select" onchange="loadClientData()"></select>
-    <button class="btn btn-save" type="button" onclick="saveClient()">💾 保存当前客户为联系人</button>
-    <button class="btn btn-del" type="button" onclick="deleteClient()">🗑️ 删除所选联系人</button>
+    <button class="btn btn-save" type="button" onclick="saveClientToSupabase()">💾 保存当前客户为联系人</button>
+    <button class="btn btn-del" type="button" onclick="deleteClientFromSupabase()">🗑️ 删除所选联系人</button>
 
     <label for="po-file">📥 上传 PO 扫描件 (PDF / 图片):</label>
     <input type="file" id="po-file" accept="application/pdf,image/*" onchange="handlePOFile(this.files[0])">
@@ -256,7 +258,7 @@
 
     <div class="controls">
         <button class="btn btn-add" onclick="addRow()">➕ 增加项目行 (Add Row)</button>
-        <button class="btn btn-print" onclick="window.print()">🖨️ 打印 / 保存 PDF</button>
+        <button class="btn btn-print" onclick="recordAndPrint()">🖨️ 打印 / 保存 PDF</button>
     </div>
 </div>
 
@@ -296,7 +298,7 @@
                 <tr>
                     <td>Invoice No</td>
                     <td>:</td>
-                    <td id="auto-invoice-no" class="editable" contenteditable="true">INV2610001</td>
+                    <td id="auto-invoice-no" class="editable" contenteditable="true">Loading...</td>
                 </tr>
                 <tr><td colspan="3" style="height: 10px;"></td></tr>
                 <tr>
@@ -372,7 +374,15 @@
 </div>
 
 <script>
-    // 预设公司模板数据，以后可以随时在这里加更多公司
+    // ================= SUPABASE 配置 (已填入你的真实信息) =================
+    const SUPABASE_URL = 'https://uezfngmfsttpqcadeyhg.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlemZuZ21mc3R0cHFjYWRleWhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyNjE5NjEsImV4cCI6MjEwODgzNzk2MX0.s4J3hYFMokieajW42rZtA-yU3sHdqfq5yXAsgqv3UH8'; 
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // 内存中保存从 Supabase 拉取的客户资料： { "客户名称": { html: "...", id: "uuid" } }
+    let supabaseClientsData = {};
+
+    const BUILTIN_NAMES = { protasco: 'Protasco Trading Sdn. Bhd.' };
     const clientTemplates = {
         "protasco": `<strong>Protasco Trading Sdn. Bhd.</strong><br>
 No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
@@ -383,68 +393,259 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
     <tr><td>Contact</td><td>: (603)7782 1688/ 7783 2688</td></tr>
 </table>`,
     };
-
-    // ===== 联系人保存 (存在本浏览器 localStorage) =====
-    function getSaved() {
-        try { return JSON.parse(localStorage.getItem('rt_clients') || '{}'); } catch (e) { return {}; }
-    }
-    function setSaved(obj) {
-        try { localStorage.setItem('rt_clients', JSON.stringify(obj)); return true; } catch (e) { return false; }
-    }
-    const BUILTIN_NAMES = { protasco: 'Protasco Trading Sdn. Bhd.' };
     const normName = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    function refreshClientSelect(selectedVal) {
+    // ================= 初始化与核心逻辑 =================
+    window.onload = async function() {
+        const today = new Date();
+        const dd = String(today.getDate()).padStart(2, '0');
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        
+        document.getElementById('auto-date').innerText = `${dd}.${mm}.${today.getFullYear()}`;
+        
+        // 1. 初始化发票号
+        await generateNextInvoiceNo();
+        
+        // 2. 初始化客户列表
+        await refreshClientSelect('protasco');
+        
+        calculateTotal();
+    };
+
+    // ----- 生成发票编号逻辑 -----
+    async function generateNextInvoiceNo() {
+        try {
+            const today = new Date();
+            const yy = String(today.getFullYear()).slice(-2);
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const prefix = `INV${yy}${mm}`;
+
+            // 查询当月最大的编号
+            const { data, error } = await supabaseClient
+                .from('invoice_records')
+                .select('invoice_no')
+                .ilike('invoice_no', `${prefix}%`)
+                .order('invoice_no', { ascending: false })
+                .limit(1);
+
+            if (error) throw error;
+
+            let nextNum = 1; // 默认 001
+            if (data && data.length > 0) {
+                // 如果有记录，取最后三位数字 + 1
+                const lastNumStr = data[0].invoice_no.replace(prefix, '');
+                const lastNum = parseInt(lastNumStr, 10);
+                if (!isNaN(lastNum)) {
+                    nextNum = lastNum + 1;
+                }
+            }
+            
+            document.getElementById('auto-invoice-no').innerText = `${prefix}${String(nextNum).padStart(3, '0')}`;
+        } catch (err) {
+            console.error("生成发票编号出错:", err);
+            document.getElementById('auto-invoice-no').innerText = "ERROR-NO";
+            setStatus('⚠️ 无法连接数据库生成发票编号。', '#c00');
+        }
+    }
+
+    // ----- 保存记录并打印 -----
+    async function recordAndPrint() {
+        // 先获取发票关键信息
+        const invNo = document.getElementById('auto-invoice-no').innerText.trim();
+        const rawDate = document.getElementById('auto-date').innerText.trim();
+        const client = currentClientName();
+        const total = parseFloat(document.getElementById('grand-total').innerText.replace(/,/g, ''));
+        const poNo = document.getElementById('po-no').innerText.trim();
+
+        // 尝试把 DD.MM.YYYY 转回 YYYY-MM-DD 存入数据库
+        let sqlDate = new Date().toISOString().split('T')[0]; 
+        const dateParts = rawDate.split('.');
+        if (dateParts.length === 3) {
+            sqlDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; 
+        }
+
+        // 检查数据库里有没有用过这个编号，如果有，说明是重印覆盖
+        try {
+             const { data, error } = await supabaseClient
+                .from('invoice_records')
+                .select('id')
+                .eq('invoice_no', invNo);
+             
+             if(error) throw error;
+             
+             if(data && data.length > 0) {
+                 console.log("Invoice 记录已存在，跳过重复插入。");
+                 window.print();
+                 return;
+             }
+
+             // 插入新的记录，占住这个号码
+             const { error: insertError } = await supabaseClient.from('invoice_records').insert([{
+                 invoice_no: invNo,
+                 invoice_date: sqlDate,
+                 client_name: client,
+                 total_amount: isNaN(total) ? 0 : total,
+                 po_no: poNo
+             }]);
+
+             if (insertError) throw insertError;
+
+        } catch (e) {
+            console.error("保存发票记录失败", e);
+            if(!confirm("⚠️ 无法将发票记录存入云端（编号可能未被占用）。是否仍要强制打印？")) {
+                return;
+            }
+        }
+        
+        window.print();
+    }
+
+    // ================= 客户资料读写 Supabase =================
+    
+    async function refreshClientSelect(selectedVal) {
         const sel = document.getElementById('client-select');
         sel.innerHTML = '';
+        
         Object.keys(BUILTIN_NAMES).forEach(k => sel.add(new Option(BUILTIN_NAMES[k], k)));
-        Object.keys(getSaved()).forEach(name => sel.add(new Option('⭐ ' + name, 'saved:' + name)));
+        
+        try {
+            const { data, error } = await supabaseClient.from('invoice_clients').select('*');
+            if (error) throw error;
+            
+            supabaseClientsData = {};
+            if (data) {
+                data.forEach(client => {
+                    const name = client.client_name;
+                    const html = `<strong>${name}</strong><br>${client.address || ''}<br>
+<table>
+    <tr><td style="width: 70px;">Attn</td><td>: ${client.attn || ''}</td></tr>
+    <tr><td>E-mail</td><td>: ${client.email || ''}</td></tr>
+    <tr><td>Contact</td><td>: ${client.contact || ''}</td></tr>
+</table>`;
+                    
+                    supabaseClientsData[name] = { html: html, id: client.id };
+                    sel.add(new Option('☁️ ' + name, 'cloud:' + name));
+                });
+            }
+        } catch (err) {
+            console.error("加载云端联系人失败:", err);
+            setStatus('⚠️ 无法加载云端联系人。', '#c00');
+        }
+
         if (selectedVal) sel.value = selectedVal;
     }
+
     function currentClientName() {
         const strong = document.querySelector('#bill-to-content strong');
         if (strong && strong.innerText.trim()) return strong.innerText.trim();
         return (document.getElementById('bill-to-content').innerText.split('\n')[0] || '').trim();
     }
-    function saveClient() {
+    
+    function parseClientHtmlToObj(htmlString, name) {
+        const div = document.createElement('div');
+        div.innerHTML = htmlString;
+        
+        const strongTag = div.querySelector('strong');
+        if(strongTag) strongTag.remove();
+        
+        let attn = '', email = '', contact = '';
+        const rows = div.querySelectorAll('tr');
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if(cells.length === 2) {
+                const label = cells[0].innerText.toLowerCase();
+                const val = cells[1].innerText.replace(/^[:\s]+/, '').trim();
+                if(label.includes('attn')) attn = val;
+                if(label.includes('mail')) email = val;
+                if(label.includes('contact')) contact = val;
+            }
+        });
+        
+        const table = div.querySelector('table');
+        if(table) table.remove();
+        
+        const address = div.innerHTML.replace(/<br\s*[\/]?>/gi, '\n').trim();
+
+        return {
+            client_name: name,
+            address: address,
+            attn: attn,
+            email: email,
+            contact: contact
+        };
+    }
+
+    async function saveClientToSupabase() {
         const name = currentClientName();
         if (!name) { alert('请先填写公司名称'); return; }
-        const saved = getSaved();
-        if (saved[name] && !confirm('「' + name + '」已存在，要覆盖吗？')) return;
-        saved[name] = document.getElementById('bill-to-content').innerHTML;
-        if (!setSaved(saved)) { alert('保存失败：浏览器不允许存储'); return; }
-        refreshClientSelect('saved:' + name);
-        setStatus('✅ 已保存联系人：' + name, '#1a7f37');
+        
+        const htmlContent = document.getElementById('bill-to-content').innerHTML;
+        
+        if (supabaseClientsData[name] && !confirm('「' + name + '」已存在云端，要覆盖更新吗？')) return;
+        
+        const clientObj = parseClientHtmlToObj(htmlContent, name);
+
+        try {
+            setStatus('⏳ 正在保存至云端...', '#0056b3');
+            let res;
+            if (supabaseClientsData[name]) {
+                res = await supabaseClient.from('invoice_clients').update(clientObj).eq('id', supabaseClientsData[name].id);
+            } else {
+                res = await supabaseClient.from('invoice_clients').insert([clientObj]);
+            }
+
+            if (res.error) throw res.error;
+
+            await refreshClientSelect('cloud:' + name);
+            setStatus('✅ 已安全保存联系人：' + name, '#1a7f37');
+        } catch (e) {
+            console.error(e);
+            alert('保存云端失败: ' + e.message);
+            setStatus('❌ 保存失败', '#c00');
+        }
     }
-    function deleteClient() {
+
+    async function deleteClientFromSupabase() {
         const val = document.getElementById('client-select').value;
-        if (!val.startsWith('saved:')) { alert('只能删除自己保存的联系人'); return; }
+        if (!val.startsWith('cloud:')) { alert('只能删除云端保存的联系人'); return; }
+        
         const name = val.slice(6);
-        if (!confirm('确定删除「' + name + '」？')) return;
-        const saved = getSaved(); delete saved[name]; setSaved(saved);
-        refreshClientSelect('protasco');
-        loadClientData();
+        const clientId = supabaseClientsData[name]?.id;
+        
+        if (!clientId) return;
+        if (!confirm('确定从云端永久删除「' + name + '」？')) return;
+        
+        try {
+            setStatus('⏳ 正在删除...', '#0056b3');
+            const { error } = await supabaseClient.from('invoice_clients').delete().eq('id', clientId);
+            if (error) throw error;
+            
+            await refreshClientSelect('protasco');
+            loadClientData();
+            setStatus('✅ 已删除联系人', '#1a7f37');
+        } catch (e) {
+            alert("删除失败: " + e.message);
+            setStatus('❌ 删除失败', '#c00');
+        }
     }
+
     function findSavedContact(company) {
         const n = normName(company);
-        const saved = getSaved();
-        for (const name of Object.keys(saved)) if (normName(name) === n) return { name, html: saved[name] };
+        for (const name of Object.keys(supabaseClientsData)) if (normName(name) === n) return { name, html: supabaseClientsData[name].html };
         for (const k of Object.keys(BUILTIN_NAMES)) if (normName(BUILTIN_NAMES[k]) === n) return { name: BUILTIN_NAMES[k], html: clientTemplates[k] };
         return null;
     }
 
-    window.onload = function() {
-        const today = new Date();
-        const dd = String(today.getDate()).padStart(2, '0');
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const yy = String(today.getFullYear()).slice(-2);
-        
-        document.getElementById('auto-date').innerText = `${dd}.${mm}.${today.getFullYear()}`;
-        document.getElementById('auto-invoice-no').innerText = `INV${yy}${mm}001`;
-        
-        refreshClientSelect('protasco');
-        calculateTotal();
-    };
+    function loadClientData() {
+        const select = document.getElementById('client-select');
+        const val = select.value;
+        if (val.startsWith('cloud:')) {
+            const html = supabaseClientsData[val.slice(6)]?.html;
+            if (html) document.getElementById('bill-to-content').innerHTML = html;
+        } else if (clientTemplates[val]) {
+            document.getElementById('bill-to-content').innerHTML = clientTemplates[val];
+        }
+    }
 
     // ================= PO 扫描件识别 =================
     function loadScript(src) {
@@ -475,7 +676,6 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
             await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
             return canvas;
         }
-        // 图片
         const img = await new Promise((res, rej) => {
             const i = new Image();
             i.onload = () => res(i); i.onerror = rej;
@@ -514,39 +714,35 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
 
     const fmt = n => n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
-    // 解析 PO 文字 (纯函数，方便测试)
     function parsePOText(text) {
         const out = { po: null, company: null, address: null, items: [] };
         const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-        // PO 号码
         let m = text.match(/PO\s*NO\s*[:：]?\s*(PO\s*\d{3,})/i) || text.match(/\b(PO\s?\d{4,})\b/i);
         if (m) out.po = m[1].replace(/\s+/g, '').toUpperCase();
 
-        // 开单公司 (PO 抬头的第一个 SDN BHD)
         for (const l of lines.slice(0, 8)) {
             const cm = l.match(/([A-Z][A-Za-z0-9 &.\-]{2,}?\s+(?:SDN\.?\s*BHD\.?))/i);
             if (cm) { out.company = cm[1].replace(/\s+/g, ' ').trim(); break; }
         }
-        // 地址 (Operation Office 之后)
+        
         const am = text.match(/Operation\s*Office\s*[:：]?\s*([\s\S]*?)(?=\s+T\s*[.:]|\n\s*\n|Factory)/i);
         if (am) out.address = am[1].replace(/\s+/g, ' ').trim().replace(/[,.\s]+$/, '');
 
-        // 项目行：以序号开头，包含金额
         const endIdx = lines.findIndex(l => /Ringgit|Total\s*Amount/i.test(l));
         const startIdx = lines.findIndex(l => /Item\b.*Description/i.test(l));
         const body = lines.slice(startIdx >= 0 ? startIdx + 1 : 0, endIdx >= 0 ? endIdx : undefined);
         for (const l of body) {
             const nums = (l.match(/\d[\d,]*\.\d{2,3}/g) || []);
             if (!/^\s*\d+\s+/.test(l) || nums.length < 3) continue;
-            // 数量 (3位小数) / 单价 / 折扣 / 金额
+            
             const qtyStr = nums.find(n => /\.\d{3}$/.test(n)) || nums[0];
             const twoDec = nums.filter(n => /\.\d{2}$/.test(n) && n !== qtyStr);
             const price = parseFloat((twoDec[0] || '0').replace(/,/g, ''));
             const qty = parseFloat(qtyStr.replace(/,/g, ''));
             const firstNumPos = l.indexOf(qtyStr);
             let desc = l.slice(0, firstNumPos).replace(/^\s*\d+\s+/, '').trim();
-            desc = desc.replace(/^[A-Z]{2,}-[A-Z0-9]+\s+/, '');   // 去掉货品代码 如 TPT-RF
+            desc = desc.replace(/^[A-Z]{2,}-[A-Z0-9]+\s+/, ''); 
             desc = desc.replace(/[|_]+/g, '').trim();
             out.items.push({ desc, qty, price });
         }
@@ -563,7 +759,7 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
             const known = findSavedContact(r.company);
             if (known) {
                 document.getElementById('bill-to-content').innerHTML = known.html;
-                filled.push('公司 (已用保存的联系人资料)');
+                filled.push('公司 (已用云端联系人资料)');
             } else {
                 const addr = r.address ? r.address : '(请填写地址)';
                 document.getElementById('bill-to-content').innerHTML =
@@ -573,7 +769,7 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
     <tr><td>E-mail</td><td>: </td></tr>
     <tr><td>Contact</td><td>: </td></tr>
 </table>`;
-                filled.push('公司 (新客户：补完 Attn 等资料后点「保存当前客户为联系人」)');
+                filled.push('公司 (新客户：补完资料后点「保存」)');
             }
         }
 
@@ -605,20 +801,9 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
         }
 
         if (filled.length) {
-            setStatus('✅ 已自动填入：' + filled.join('、') + '。请核对虚线框内容，尤其是 Attn / 货物数量(QTY)。', '#1a7f37');
+            setStatus('✅ 已自动填入：' + filled.join('、') + '。请核对虚线框内容，尤其是 Attn / QTY。', '#1a7f37');
         } else {
-            setStatus('⚠️ 没识别到有效内容，请换更清晰的扫描件，或在下方修改识别原文后重试。', '#b36b00');
-        }
-    }
-
-    function loadClientData() {
-        const select = document.getElementById('client-select');
-        const val = select.value;
-        if (val.startsWith('saved:')) {
-            const html = getSaved()[val.slice(6)];
-            if (html) document.getElementById('bill-to-content').innerHTML = html;
-        } else if (clientTemplates[val]) {
-            document.getElementById('bill-to-content').innerHTML = clientTemplates[val];
+            setStatus('⚠️ 没识别到有效内容，请检查扫描件，或在下方修改识别原文后重试。', '#b36b00');
         }
     }
 
