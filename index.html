@@ -249,12 +249,11 @@
 </head>
 <body>
 
-<!-- 左侧控制与选项面板 -->
 <div class="sidebar">
     <h3>⚙️ Invoice Control Panel</h3>
 
     <div id="login-box" style="display:none">
-        <div class="legend-box">登录后才能读取 Supabase 里的客户资料和 invoice 编号。</div>
+        <div class="legend-box">请用你在 Supabase 建的账号登录。</div>
         <label for="lg-email">Email</label>
         <input id="lg-email" type="email" autocomplete="username">
         <label for="lg-pass">Password</label>
@@ -263,32 +262,32 @@
         <div id="login-status" class="status"></div>
     </div>
 
-    <div id="main-panel">
-        <div class="client-tools">
-        <label for="client-select">📂 选择联系人 (Select Client):</label>
-        <select id="client-select" onchange="loadClientData()"></select>
-        <button class="btn btn-add" type="button" onclick="toggleNewClient(true)">➕ 添加客户</button>
-        <div id="new-client-box" class="legend-box" style="display:none">
-            <b>新客户</b>
+    <div id="main-panel" style="display:none">
+        <label for="client-select">📂 选择客户 (Select Client):</label>
+        <select id="client-select" onchange="pickClient()"></select>
+        <button class="btn btn-add" type="button" onclick="openClientForm(false)">➕ 添加客户</button>
+        <button class="btn btn-save" type="button" onclick="openClientForm(true)">✏️ 编辑所选客户</button>
+        <button class="btn btn-del" type="button" onclick="deleteClient()">🗑️ 删除所选客户</button>
+
+        <div id="client-form" class="legend-box" style="display:none">
+            <b id="nc-title">新客户</b>
             <label for="nc-name">公司名 *</label><input id="nc-name">
-            <label for="nc-addr">地址</label><textarea id="nc-addr" rows="3"></textarea>
+            <label for="nc-address">地址</label><textarea id="nc-address" rows="3"></textarea>
             <label for="nc-attn">Attn（联系人）</label><input id="nc-attn">
             <label for="nc-email">E-mail</label><input id="nc-email" type="email">
-            <label for="nc-tel">Contact（电话）</label><input id="nc-tel">
-            <button class="btn btn-main" type="button" onclick="addClient()">保存客户</button>
-            <button class="btn btn-del" type="button" onclick="toggleNewClient(false)" style="background:#6c757d">取消</button>
-        </div>
-        <button class="btn btn-save" type="button" onclick="saveClient()">💾 保存当前客户为联系人</button>
-        <button class="btn btn-del" type="button" onclick="deleteClient()">🗑️ 删除所选联系人</button>
-        <button class="btn btn-add" type="button" id="import-btn" style="display:none" onclick="importLocalClients()"></button>
+            <label for="nc-phone">Contact（电话）</label><input id="nc-phone">
+            <button class="btn btn-main" type="button" onclick="saveClientForm()">保存客户</button>
+            <button class="btn btn-del" type="button" style="background:#6c757d" onclick="closeClientForm()">取消</button>
         </div>
 
         <div class="controls">
-            <button class="btn btn-add" onclick="addRow()">➕ 增加项目行 (Add Row)</button>
+            <button class="btn btn-add" type="button" onclick="addRow()">➕ 增加项目行</button>
+            <button class="btn btn-save" type="button" onclick="delRow()">➖ 删除最后一行</button>
             <button class="btn btn-main" id="save-btn" type="button" onclick="saveInvoice()">✅ 保存 Invoice</button>
-            <div id="save-status" class="status"></div>
             <button class="btn btn-print" type="button" onclick="saveAndPrint()">🖨️ 保存并打印 / 存 PDF</button>
             <button class="btn btn-save" type="button" onclick="newInvoice()">🆕 新 Invoice</button>
+            <div id="save-status" class="status"></div>
+            <button class="btn btn-del" type="button" style="background:#6c757d" onclick="doLogout()">退出登录</button>
         </div>
     </div>
 </div>
@@ -389,254 +388,127 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-    // ================= 设定 =================
-    const SUPABASE_URL = 'https://xxjqzsaqbyaskiqvplrb.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4anF6c2FxYnlhc2tpcXZwbHJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3MTY1MTksImV4cCI6MjEwODI5MjUxOX0.2B5IuAVjqCwBWJ_90JFVXKW_BLUv2Nwtiks_oOYYrq0';
+    // ================= 设定：你自己的 Supabase 项目 =================
+    const SUPABASE_URL = 'https://uezfngmfsttpqcadeyhg.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlemZuZ21mc3R0cHFjYWRleWhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyNjE5NjEsImV4cCI6MjEwODgzNzk2MX0.s4J3hYFMokieajW42rZtA-yU3sHdqfq5yXAsgqv3UH8';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
     });
-    const ctx = { job: null, clients: [], tableOk: true, busy: false, connected: false, savedNo: null };
+    const st = { clients: [], savedNo: null, busy: false, editId: null, signedIn: false };
 
     // ================= 小工具 =================
     const $ = id => document.getElementById(id);
     const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    const normName = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
     const fmt = n => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-    function setStatus(id, msg, color) {
+    function say(id, msg, ok) {
         const el = $(id);
-        el.style.color = color || '#555';
+        el.style.color = ok === true ? '#1a7f37' : (ok === false ? '#c00' : '#555');
         el.innerText = msg;
     }
-    function isMissingTable(err) {
-        return !!err && (err.code === '42P01' || err.code === 'PGRST205' || err.code === 'PGRST202' || /does not exist|schema cache|Could not find/i.test(err.message || ''));
+    function errText(e) {
+        const m = (e && e.message) || String(e);
+        const code = e && e.code ? ' (' + e.code + ')' : '';
+        if (e && (e.code === '42P01' || e.code === 'PGRST205' || /does not exist|schema cache/i.test(m)))
+            return '表还没建好：请在 Supabase 的 SQL Editor 运行 invoice_setup.sql。\n' + m + code;
+        return m + code;
     }
-    const EXPIRED_HINT = '⚠️ 登录已过期，或这个账号没有权限（要用管理员账号）。请刷新页面重新登录。';
-    function isAuthError(err) { return !!err && /JWT|expired|not allowed|permission denied|row-level security/i.test(err.message || ''); }
-    const SETUP_HINT = '⚠️ 数据库还没设定好：请先在 Supabase 的 SQL Editor 运行 invoice_setup.sql';
-
     function todayText() {
         const t = new Date();
-        return `${String(t.getDate()).padStart(2, '0')}.${String(t.getMonth() + 1).padStart(2, '0')}.${t.getFullYear()}`;
+        return String(t.getDate()).padStart(2, '0') + '.' + String(t.getMonth() + 1).padStart(2, '0') + '.' + t.getFullYear();
     }
     function dateToIso(text) {
         const m = String(text || '').trim().match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/);
         if (!m) return null;
         const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
         if (d.getFullYear() !== Number(m[3]) || d.getMonth() !== Number(m[2]) - 1 || d.getDate() !== Number(m[1])) return null;
-        return `${m[3]}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}`;
+        return m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
     }
 
-    // ================= 启动 =================
+    // ================= 启动 / 登录 =================
     window.onload = async function () {
-        $('auto-date').addEventListener('blur', () => { if (ctx.connected && !ctx.savedNo) peekNumber(); });
-        resetInvoice();
+        $('auto-date').addEventListener('blur', () => { if (st.signedIn && !st.savedNo) showNext(); });
+        newForm();
         const { data } = await sb.auth.getSession();
-        if (data && data.session) await startConnected();
-        else { $('main-panel').style.display = 'none'; $('login-box').style.display = ''; }
+        if (data && data.session) await enter();
+        else { $('login-box').style.display = ''; }
     };
-
-    async function startConnected() {
-        ctx.connected = true;
+    async function enter() {
+        st.signedIn = true;
         $('login-box').style.display = 'none';
         $('main-panel').style.display = '';
         await loadClients();
-        await peekNumber();
+        await showNext();
     }
-
     async function doLogin() {
         const email = $('lg-email').value.trim(), password = $('lg-pass').value;
-        if (!email || !password) { setStatus('login-status', '请输入 Email 和 Password', '#c00'); return; }
-        setStatus('login-status', '⏳ 登录中...');
+        if (!email || !password) { say('login-status', '请输入 Email 和 Password', false); return; }
+        say('login-status', '⏳ 登录中...');
         const { error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) { setStatus('login-status', '❌ ' + error.message, '#c00'); return; }
+        if (error) { say('login-status', '❌ ' + error.message, false); return; }
         $('lg-pass').value = '';
-        setStatus('login-status', '');
-        await startConnected();
+        say('login-status', '');
+        await enter();
     }
+    async function doLogout() { await sb.auth.signOut(); location.reload(); }
 
-    // 清空，开一张新的 invoice
-    function resetInvoice() {
-        ctx.savedNo = null;
-        $('auto-invoice-no').innerText = '';
-        $('po-no').innerText = '';
-        $('auto-date').innerText = todayText();
-        $('client-select').value = '';
-        blankBillTo();
-        $('items-body').innerHTML = '';
-        makeRow('', '', '1 TRIP');
-        setStatus('save-status', '');
-        if (ctx.connected) peekNumber();
-    }
-    function newInvoice() {
-        if (confirm('开新的 Invoice？现在这张没保存的内容会清空。')) resetInvoice();
-    }
-
-    function blankBillTo() {
-        $('bill-to-content').innerHTML = billToHtml('(Company name)', '(请填写地址)', '', '');
-    }
-    function billToHtml(name, address, attn, contact) {
-        return `<strong>${esc(name)}</strong><br>${esc(address)}<br>
-<table>
-    <tr><td style="width: 70px;">Attn</td><td>: ${esc(attn)}</td></tr>
-    <tr><td>E-mail</td><td>: </td></tr>
-    <tr><td>Contact</td><td>: ${esc(contact)}</td></tr>
-</table>`;
-    }
-
-    // 下一个编号 (只是显示，真正占用是在保存的时候)
-    async function peekNumber() {
-        const iso = dateToIso($('auto-date').innerText);
-        if (!iso) return;
-        const { data, error } = await sb.rpc('next_invoice_no', { p_date: iso });
-        if (error) {
-            console.error(error);
-            if (isMissingTable(error)) { ctx.tableOk = false; setStatus('save-status', SETUP_HINT, '#c00'); }
-            $('auto-invoice-no').innerText = iso.slice(2, 4) + iso.slice(5, 7) + '001';
-            return;
-        }
-        $('auto-invoice-no').innerText = data;
-    }
-
-    // ================= 联系人 (存在 Supabase) =================
-    const BUILTIN_CLIENT = {
-        name: 'Protasco Trading Sdn. Bhd.',
-        html: `<strong>Protasco Trading Sdn. Bhd.</strong><br>
-No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
-46150 Petaling Jaya, Selangor, Malaysia.<br>
-<table>
-    <tr><td style="width: 70px;">Attn</td><td>: Ms Julie</td></tr>
-    <tr><td>E-mail</td><td>: julie@protascotrading.com.my</td></tr>
-    <tr><td>Contact</td><td>: (603)7782 1688/ 7783 2688</td></tr>
-</table>`
-    };
-
-    async function loadClients() {
+    // ================= 客户 =================
+    async function loadClients(selectId) {
         const { data, error } = await sb.from('invoice_clients').select('*').order('name');
-        if (error) {
-            console.error(error);
-            ctx.clients = [];
-            if (isMissingTable(error)) { ctx.tableOk = false; setStatus('save-status', SETUP_HINT, '#c00'); }
-            else if (isAuthError(error)) { ctx.tableOk = false; setStatus('save-status', EXPIRED_HINT, '#c00'); }
-        } else ctx.clients = data || [];
-        refreshClientSelect();
-    }
-    function refreshClientSelect(selectedId) {
+        if (error) { say('save-status', '❌ 读取客户失败：' + errText(error), false); return; }
+        st.clients = data || [];
         const sel = $('client-select');
         sel.innerHTML = '';
-        sel.add(new Option('— 选择联系人 —', ''));
-        ctx.clients.forEach(c => sel.add(new Option(c.name, c.id)));
-        if (selectedId) sel.value = selectedId;
-        updateImportBtn();
+        sel.add(new Option('— 选择客户 —', ''));
+        st.clients.forEach(c => sel.add(new Option(c.name, c.id)));
+        if (selectId) sel.value = selectId;
     }
-    function selectedClient() { return ctx.clients.find(c => c.id === $('client-select').value) || null; }
-    function loadClientData() {
-        const c = selectedClient();
-        if (c) $('bill-to-content').innerHTML = c.bill_to_html;
+    function picked() { return st.clients.find(c => c.id === $('client-select').value) || null; }
+    function billTo(c) {
+        const v = k => esc(c && c[k] || '');
+        const addr = c && c.address ? esc(c.address).replace(/\n/g, '<br>') : '(请填写地址)';
+        $('bill-to-content').innerHTML = '<strong>' + (c ? esc(c.name) : '(Company name)') + '</strong><br>' + addr + '<br>' +
+            '<table><tr><td style="width: 70px;">Attn</td><td>: ' + v('attn') + '</td></tr>' +
+            '<tr><td>E-mail</td><td>: ' + v('email') + '</td></tr>' +
+            '<tr><td>Contact</td><td>: ' + v('phone') + '</td></tr></table>';
     }
-    function currentClientName() {
-        const strong = document.querySelector('#bill-to-content strong');
-        if (strong && strong.innerText.trim()) return strong.innerText.trim();
-        return ($('bill-to-content').innerText.split('\n')[0] || '').trim();
+    function pickClient() {
+        billTo(picked());
+        if (!st.savedNo) { $('auto-date').innerText = todayText(); showNext(); }
     }
-
-    function toggleNewClient(on) {
-        $('new-client-box').style.display = on ? '' : 'none';
-        if (on) $('nc-name').focus();
+    function openClientForm(edit) {
+        const c = edit ? picked() : null;
+        if (edit && !c) { alert('请先选择要编辑的客户'); return; }
+        st.editId = c ? c.id : null;
+        $('nc-title').innerText = c ? '编辑客户' : '新客户';
+        ['name', 'address', 'attn', 'email', 'phone'].forEach(k => { $('nc-' + k).value = c ? (c[k] || '') : ''; });
+        $('client-form').style.display = '';
+        $('nc-name').focus();
     }
-
-    async function addClient() {
-        if (!ctx.tableOk) { alert(SETUP_HINT); return; }
-        const name = $('nc-name').value.trim();
-        if (!name) { alert('请先填写公司名'); return; }
-        const key = normName(name);
-        if (ctx.clients.some(c => c.name_key === key)) { alert('「' + name + '」已经存在'); return; }
-        const addr = $('nc-addr').value.trim().split(/\n+/).map(x => esc(x)).join('<br>');
-        const html = `<strong>${esc(name)}</strong><br>${addr}<br>
-<table>
-    <tr><td style="width: 70px;">Attn</td><td>: ${esc($('nc-attn').value.trim())}</td></tr>
-    <tr><td>E-mail</td><td>: ${esc($('nc-email').value.trim())}</td></tr>
-    <tr><td>Contact</td><td>: ${esc($('nc-tel').value.trim())}</td></tr>
-</table>`;
-        const { data, error } = await sb.from('invoice_clients').insert({ name, name_key: key, bill_to_html: html }).select().single();
-        if (error) { setStatus('save-status', '❌ 添加失败：' + error.message, '#c00'); return; }
-        await loadClients();
-        refreshClientSelect(data.id);
-        loadClientData();
-        ['nc-name', 'nc-addr', 'nc-attn', 'nc-email', 'nc-tel'].forEach(id => $(id).value = '');
-        toggleNewClient(false);
-        setStatus('save-status', '✅ 已添加客户：' + name, '#1a7f37');
+    function closeClientForm() { $('client-form').style.display = 'none'; }
+    async function saveClientForm() {
+        const row = {};
+        ['name', 'address', 'attn', 'email', 'phone'].forEach(k => { row[k] = $('nc-' + k).value.trim(); });
+        if (!row.name) { alert('请先填写公司名'); return; }
+        const q = st.editId ? sb.from('invoice_clients').update(row).eq('id', st.editId) : sb.from('invoice_clients').insert(row);
+        const { data, error } = await q.select().single();
+        if (error) { say('save-status', '❌ 保存客户失败：' + errText(error), false); return; }
+        closeClientForm();
+        await loadClients(data.id);
+        pickClient();
+        say('save-status', '✅ 已保存客户：' + data.name, true);
     }
-
-    async function saveClient() {
-        if (!ctx.tableOk) { alert(SETUP_HINT); return; }
-        const name = currentClientName();
-        if (!name) { alert('请先填写公司名称'); return; }
-        const key = normName(name);
-        const html = $('bill-to-content').innerHTML;
-        const existing = ctx.clients.find(c => c.name_key === key);
-        if (existing && !confirm('「' + name + '」已存在，要覆盖吗？')) return;
-        const custId = ctx.job && ctx.job.customers ? ctx.job.customers.id : null;
-
-        let res;
-        if (existing) {
-            res = await sb.from('invoice_clients')
-                .update({ name, bill_to_html: html, customer_id: custId || existing.customer_id, updated_at: new Date().toISOString() })
-                .eq('id', existing.id).select().single();
-        } else {
-            res = await sb.from('invoice_clients')
-                .insert({ name, name_key: key, bill_to_html: html, customer_id: custId }).select().single();
-        }
-        if (res.error) { setStatus('save-status', '❌ 保存联系人失败：' + res.error.message, '#c00'); return; }
-        await loadClients();
-        refreshClientSelect(res.data.id);
-        setStatus('save-status', '✅ 已保存联系人：' + name, '#1a7f37');
-    }
-
     async function deleteClient() {
-        const c = selectedClient();
-        if (!c) { alert('请先选择要删除的联系人'); return; }
+        const c = picked();
+        if (!c) { alert('请先选择要删除的客户'); return; }
         if (!confirm('确定删除「' + c.name + '」？')) return;
         const { error } = await sb.from('invoice_clients').delete().eq('id', c.id);
-        if (error) { setStatus('save-status', '❌ 删除失败：' + error.message, '#c00'); return; }
+        if (error) { say('save-status', '❌ 删除失败：' + errText(error), false); return; }
         await loadClients();
+        billTo(null);
     }
-
-    // 把以前存在这个浏览器里的联系人搬到 Supabase (只需要做一次)
-    function localEntries() {
-        let saved = {};
-        try { saved = JSON.parse(localStorage.getItem('rt_clients') || '{}'); } catch (e) {}
-        const all = { [BUILTIN_CLIENT.name]: BUILTIN_CLIENT.html, ...saved };
-        return Object.keys(all)
-            .filter(name => !ctx.clients.some(c => c.name_key === normName(name)))
-            .map(name => ({ name, html: all[name] }));
-    }
-    function updateImportBtn() {
-        const btn = $('import-btn');
-        let done = false;
-        try { done = localStorage.getItem('rt_clients_imported') === '1'; } catch (e) {}
-        const missing = ctx.tableOk && !done ? localEntries() : [];
-        btn.style.display = missing.length ? '' : 'none';
-        btn.innerText = `📥 导入本机已保存的联系人 (${missing.length})`;
-    }
-    async function importLocalClients() {
-        const list = localEntries();
-        if (!list.length) return;
-        const rows = list.map(e => ({ name: e.name, name_key: normName(e.name), bill_to_html: e.html }));
-        const { error } = await sb.from('invoice_clients').insert(rows);
-        if (error) { setStatus('save-status', '❌ 导入失败：' + error.message, '#c00'); return; }
-        try { localStorage.setItem('rt_clients_imported', '1'); } catch (e) {}
-        await loadClients();
-        setStatus('save-status', `✅ 已导入 ${rows.length} 个联系人`, '#1a7f37');
-    }
-
-    function loadScript(src) {
-        return new Promise((resolve, reject) => {
-            const el = document.createElement('script');
-            el.src = src; el.onload = resolve; el.onerror = () => reject(new Error('无法加载 ' + src));
-            document.head.appendChild(el);
-        });
+    function clientName() {
+        const strong = document.querySelector('#bill-to-content strong');
+        return strong ? strong.innerText.trim() : '';
     }
 
     // ================= 项目行 / 合计 =================
@@ -657,94 +529,103 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
         tbody.appendChild(tr);
         calculateTotal();
     }
-
     function addRow() { makeRow('New Item Description', '0.00', '1'); }
-
+    function delRow() {
+        const tb = $('items-body');
+        if (tb.rows.length > 1) { tb.deleteRow(-1); calculateTotal(); }
+    }
     function currentTotal() {
         const v = parseFloat($('grand-total').innerText.replace(/,/g, ''));
         return isNaN(v) ? 0 : v;
     }
-
     function calculateTotal() {
-        let grandTotal = 0;
+        let grand = 0;
         document.querySelectorAll('#items-body tr').forEach(row => {
             const price = parseFloat(row.querySelector('.price').innerText.replace(/,/g, ''));
-            const qtyMatch = row.querySelector('.qty').innerText.match(/[\d\.]+/);
-            const qty = qtyMatch ? parseFloat(qtyMatch[0]) : 0;
-            const amtCell = row.querySelector('.amt');
-            if (!isNaN(price) && !isNaN(qty)) {
-                const rowTotal = price * qty;
-                amtCell.innerText = fmt(rowTotal);
-                grandTotal += rowTotal;
-            } else {
-                amtCell.innerText = '0.00';
-            }
+            const qm = row.querySelector('.qty').innerText.match(/[\d.]+/);
+            const qty = qm ? parseFloat(qm[0]) : 0;
+            const amt = row.querySelector('.amt');
+            if (!isNaN(price) && !isNaN(qty)) { amt.innerText = fmt(price * qty); grand += price * qty; }
+            else amt.innerText = '0.00';
         });
-        $('grand-total').innerText = fmt(grandTotal);
+        $('grand-total').innerText = fmt(grand);
     }
 
-    // ================= 保存的内容 (以后可以再打开修改) =================
-    function collectSnapshot() {
+    // ================= 编号 (年2位 + 月2位 + 当月第几张3位，例如 2610001) =================
+    async function nextNo(iso) {
+        const ym = iso.slice(2, 4) + iso.slice(5, 7);
+        const { data, error } = await sb.from('invoices').select('invoice_no')
+            .like('invoice_no', ym + '%').order('invoice_no', { ascending: false }).limit(1);
+        if (error) throw error;
+        const last = data && data.length ? (parseInt(data[0].invoice_no.slice(4), 10) || 0) : 0;
+        return ym + String(last + 1).padStart(3, '0');
+    }
+    async function showNext() {
+        const iso = dateToIso($('auto-date').innerText);
+        if (!iso) return;
+        try { $('auto-invoice-no').innerText = await nextNo(iso); }
+        catch (e) { say('save-status', '❌ 读取编号失败：' + errText(e), false); }
+    }
+
+    // ================= 新 / 保存 / 打印 =================
+    function newForm() {
+        st.savedNo = null;
+        $('auto-invoice-no').innerText = '';
+        $('po-no').innerText = '';
+        $('auto-date').innerText = todayText();
+        $('client-select').value = '';
+        billTo(null);
+        $('items-body').innerHTML = '';
+        makeRow('', '', '1 TRIP');
+        say('save-status', '');
+    }
+    function newInvoice() {
+        if (!confirm('开新的 Invoice？现在这张没保存的内容会清空。')) return;
+        newForm();
+        showNext();
+    }
+    function snapshot() {
         const items = [...document.querySelectorAll('#items-body tr')].map(tr => {
             const d = tr.cells[0].querySelector('div > div:nth-child(2)');
-            return {
-                desc: d ? d.innerHTML : tr.cells[0].innerHTML,
-                price: tr.querySelector('.price').innerText.trim(),
-                qty: tr.querySelector('.qty').innerText.trim()
-            };
+            return { desc: d ? d.innerHTML : '', price: tr.querySelector('.price').innerText.trim(), qty: tr.querySelector('.qty').innerText.trim() };
         });
-        return {
-            bill_to_html: $('bill-to-content').innerHTML,
-            po_no: $('po-no').innerText.trim(),
-            date: $('auto-date').innerText.trim(),
-            client_id: $('client-select').value || null,
-            items
-        };
+        return { client_id: $('client-select').value || null, bill_to_html: $('bill-to-content').innerHTML,
+                 po_no: $('po-no').innerText.trim(), date: $('auto-date').innerText.trim(), items };
     }
-
-    function restoreSnapshot(inv) {
-        const s = inv.snapshot || {};
-        if (s.bill_to_html) $('bill-to-content').innerHTML = s.bill_to_html;
-        if (s.client_id && ctx.clients.some(c => c.id === s.client_id)) $('client-select').value = s.client_id;
-        $('po-no').innerText = s.po_no || '';
-        if (s.date) $('auto-date').innerText = s.date;
-        $('auto-invoice-no').innerText = inv.invoice_no;
-        $('items-body').innerHTML = '';
-        (s.items || []).forEach(it => makeRow(it.desc, it.price, it.qty));
-        if (!(s.items || []).length) makeRow('', '', '');
-        calculateTotal();
-    }
-
-    // ================= 保存 / 打印 =================
-    // 第一次保存才占用编号，同一张再保存编号不变
+    // 第一次保存才占用编号；同一张再保存，编号不变
     async function saveInvoice() {
-        if (ctx.busy) return false;
-        if (!ctx.connected) { alert('请先登录'); return false; }
-        if (!ctx.tableOk) { alert(SETUP_HINT); return false; }
+        if (st.busy) return false;
         const iso = dateToIso($('auto-date').innerText);
         if (!iso) { alert('日期格式不对，请写成 30.10.2026 这样'); return false; }
         const total = currentTotal();
         if (!(total > 0)) { alert('金额是 0，请先填好单价'); return false; }
-        ctx.busy = true;
+        st.busy = true;
         $('save-btn').disabled = true;
         try {
-            setStatus('save-status', '⏳ 正在保存...');
-            const snap = collectSnapshot();
-            const { data: no, error } = await sb.rpc('save_invoice', {
-                p_invoice_no: ctx.savedNo, p_client_name: currentClientName(), p_po_no: snap.po_no,
-                p_invoice_date: iso, p_total: total, p_snapshot: snap
-            });
-            if (error) throw new Error(isMissingTable(error) ? SETUP_HINT : (isAuthError(error) ? EXPIRED_HINT : error.message));
-            ctx.savedNo = no;
-            $('auto-invoice-no').innerText = no;
-            setStatus('save-status', '✅ 已保存 ' + no, '#1a7f37');
+            say('save-status', '⏳ 正在保存...');
+            const snap = snapshot();
+            const base = { invoice_date: iso, client_name: clientName(), po_no: snap.po_no, total, snapshot: snap };
+            if (st.savedNo) {
+                const { error } = await sb.from('invoices').update(base).eq('invoice_no', st.savedNo);
+                if (error) throw error;
+            } else {
+                for (let i = 0; i < 5 && !st.savedNo; i++) {
+                    const no = await nextNo(iso);
+                    const { error } = await sb.from('invoices').insert({ ...base, invoice_no: no });
+                    if (!error) st.savedNo = no;
+                    else if (error.code !== '23505') throw error;
+                }
+                if (!st.savedNo) throw new Error('编号冲突，请再按一次保存');
+            }
+            $('auto-invoice-no').innerText = st.savedNo;
+            say('save-status', '✅ 已保存 ' + st.savedNo, true);
             return true;
         } catch (e) {
             console.error(e);
-            setStatus('save-status', '❌ ' + e.message, '#c00');
+            say('save-status', '❌ ' + errText(e), false);
             return false;
         } finally {
-            ctx.busy = false;
+            st.busy = false;
             $('save-btn').disabled = false;
         }
     }
