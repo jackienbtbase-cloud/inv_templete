@@ -6,8 +6,6 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const RT_ADMIN_EMAIL = 'testing@gmail.com';
-// The invoice maker (a separate page). "Create invoice" opens it with the job already filled in.
-const INVOICE_TOOL_URL = 'https://jackienbtbase-cloud.github.io/inv_templete/';
 
 // ==========================================
 // 2. UI ELEMENTS MAPPING
@@ -3017,18 +3015,7 @@ const app = {
     adminDocs(job) {
         return ui.poSlip(job, { download: true, upload: true, handler: 'adminUploadPO', emptyText: 'No PO yet. The customer can upload it, or you can upload it here.' })
             + ui.doSlipAdmin(job)
-            + ui.invSlip(job, { download: true, upload: true })
-            + this.invoiceMakerButton(job);
-    },
-
-    // Opens the invoice maker in a new tab, with this job filled in (needs the accepted price)
-    invoiceMakerButton(job) {
-        if (!job || job.accepted_price == null) return '';
-        const url = INVOICE_TOOL_URL + '?job=' + encodeURIComponent(job.id);
-        return `<div class="remarks do-block" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px">
-            <span class="hint">${job.invoice_file ? 'Need to change the invoice? Open it in the invoice maker.' : 'Fill in the invoice automatically from this job.'}</span>
-            <a class="btn btn-primary btn-sm" style="text-decoration:none" href="${ui.esc(url)}" target="_blank" rel="noopener"><i class="ri-file-text-line"></i> ${job.invoice_file ? 'Edit invoice' : 'Create invoice'}</a>
-        </div>`;
+            + ui.invSlip(job, { download: true, upload: true });
     },
 
     // Admin: Upload / Replace PO on behalf of the customer
