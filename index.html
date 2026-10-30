@@ -518,11 +518,16 @@
                     <div class="editable desc" contenteditable="true" style="flex: 1; min-height: 1.4em;">${descHtml}</div>
                 </div>
             </td>
-            <td class="editable text-right price" contenteditable="true" oninput="calculateTotal()">${esc(price)}</td>
+            <td class="editable text-right price" contenteditable="true" oninput="calculateTotal()" onblur="fmtPrice(this)">${esc(price)}</td>
             <td class="editable text-center qty" contenteditable="true" oninput="calculateTotal()">${esc(qty)}</td>
             <td class="text-right amt">0.00</td>`;
         tbody.appendChild(tr);
         calculateTotal();
+    }
+    // 单价打完离开格子，自动变成两位小数 (756 → 756.00, 1210 → 1,210.00)
+    function fmtPrice(td) {
+        const v = parseFloat(td.innerText.replace(/,/g, ''));
+        if (!isNaN(v)) { td.innerText = fmt(v); calculateTotal(); }
     }
     function addRow() { makeRow('New Item Description', '0.00', '1'); }
     function delRow() {
