@@ -281,13 +281,8 @@
         </div>
 
         <div class="controls">
-            <button class="btn btn-add" type="button" onclick="addRow()">➕ 增加项目行</button>
-            <button class="btn btn-save" type="button" onclick="delRow()">➖ 删除最后一行</button>
-            <button class="btn btn-main" id="save-btn" type="button" onclick="saveInvoice()">✅ 保存 Invoice</button>
-            <button class="btn btn-print" type="button" onclick="saveAndPrint()">🖨️ 保存并打印 / 存 PDF</button>
-            <button class="btn btn-save" type="button" onclick="newInvoice()">🆕 新 Invoice</button>
+            <button class="btn btn-print" id="print-btn" type="button" onclick="saveAndPrint()">🖨️ 保存并打印 / 存 PDF</button>
             <div id="save-status" class="status"></div>
-            <button class="btn btn-del" type="button" style="background:#6c757d" onclick="doLogout()">退出登录</button>
         </div>
     </div>
 </div>
@@ -600,7 +595,7 @@
         const total = currentTotal();
         if (!(total > 0)) { alert('金额是 0，请先填好单价'); return false; }
         st.busy = true;
-        $('save-btn').disabled = true;
+        $('print-btn').disabled = true;
         try {
             say('save-status', '⏳ 正在保存...');
             const snap = snapshot();
@@ -626,7 +621,7 @@
             return false;
         } finally {
             st.busy = false;
-            $('save-btn').disabled = false;
+            $('print-btn').disabled = false;
         }
     }
     async function saveAndPrint() {
