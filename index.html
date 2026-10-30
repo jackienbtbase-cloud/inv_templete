@@ -270,6 +270,17 @@
         <div class="client-tools">
         <label for="client-select">📂 选择联系人 (Select Client):</label>
         <select id="client-select" onchange="loadClientData()"></select>
+        <button class="btn btn-add" type="button" onclick="toggleNewClient(true)">➕ 添加客户</button>
+        <div id="new-client-box" class="legend-box" style="display:none">
+            <b>新客户</b>
+            <label for="nc-name">公司名 *</label><input id="nc-name">
+            <label for="nc-addr">地址</label><textarea id="nc-addr" rows="3"></textarea>
+            <label for="nc-attn">Attn（联系人）</label><input id="nc-attn">
+            <label for="nc-email">E-mail</label><input id="nc-email" type="email">
+            <label for="nc-tel">Contact（电话）</label><input id="nc-tel">
+            <button class="btn btn-main" type="button" onclick="addClient()">保存客户</button>
+            <button class="btn btn-del" type="button" onclick="toggleNewClient(false)" style="background:#6c757d">取消</button>
+        </div>
         <button class="btn btn-save" type="button" onclick="saveClient()">💾 保存当前客户为联系人</button>
         <button class="btn btn-del" type="button" onclick="deleteClient()">🗑️ 删除所选联系人</button>
         <button class="btn btn-add" type="button" id="import-btn" style="display:none" onclick="importLocalClients()"></button>
@@ -572,7 +583,7 @@
         if (error) {
             console.error(error);
             if (isMissingTable(error)) { ctx.tableOk = false; setStatus('save-status', SETUP_HINT, '#c00'); }
-            $('auto-invoice-no').innerText = 'INV' + iso.slice(2, 4) + iso.slice(5, 7) + '001';
+            $('auto-invoice-no').innerText = iso.slice(2, 4) + iso.slice(5, 7) + '001';
             return;
         }
         $('auto-invoice-no').innerText = data;
@@ -618,6 +629,34 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
         const strong = document.querySelector('#bill-to-content strong');
         if (strong && strong.innerText.trim()) return strong.innerText.trim();
         return ($('bill-to-content').innerText.split('\n')[0] || '').trim();
+    }
+
+    function toggleNewClient(on) {
+        $('new-client-box').style.display = on ? '' : 'none';
+        if (on) $('nc-name').focus();
+    }
+
+    async function addClient() {
+        if (!ctx.tableOk) { alert(SETUP_HINT); return; }
+        const name = $('nc-name').value.trim();
+        if (!name) { alert('请先填写公司名'); return; }
+        const key = normName(name);
+        if (ctx.clients.some(c => c.name_key === key)) { alert('「' + name + '」已经存在'); return; }
+        const addr = $('nc-addr').value.trim().split(/\n+/).map(x => esc(x)).join('<br>');
+        const html = `<strong>${esc(name)}</strong><br>${addr}<br>
+<table>
+    <tr><td style="width: 70px;">Attn</td><td>: ${esc($('nc-attn').value.trim())}</td></tr>
+    <tr><td>E-mail</td><td>: ${esc($('nc-email').value.trim())}</td></tr>
+    <tr><td>Contact</td><td>: ${esc($('nc-tel').value.trim())}</td></tr>
+</table>`;
+        const { data, error } = await sb.from('invoice_clients').insert({ name, name_key: key, bill_to_html: html }).select().single();
+        if (error) { setStatus('save-status', '❌ 添加失败：' + error.message, '#c00'); return; }
+        await loadClients();
+        refreshClientSelect(data.id);
+        loadClientData();
+        ['nc-name', 'nc-addr', 'nc-attn', 'nc-email', 'nc-tel'].forEach(id => $(id).value = '');
+        toggleNewClient(false);
+        setStatus('save-status', '✅ 已添加客户：' + name, '#1a7f37');
     }
 
     async function saveClient() {
