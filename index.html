@@ -571,7 +571,7 @@
         $('client-select').value = '';
         billTo(null);
         $('items-body').innerHTML = '';
-        makeRow('', '', '1 TRIP');
+        makeRow('TRANSPORT FEES<br><br>ITEM -<br>QTY -', '', '1 TRIP');
         say('save-status', '');
     }
     function newInvoice() {
@@ -613,7 +613,7 @@
                 if (!st.savedNo) throw new Error('编号冲突，请再按一次保存');
             }
             $('auto-invoice-no').innerText = st.savedNo;
-            say('save-status', '✅ 已保存 ' + st.savedNo, true);
+            say('save-status', '✅ 已保存 ' + st.savedNo + '（要开下一张，请刷新页面）', true);
             return true;
         } catch (e) {
             console.error(e);
