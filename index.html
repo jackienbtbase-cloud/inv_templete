@@ -253,6 +253,16 @@
 <div class="sidebar">
     <h3>⚙️ Invoice Control Panel</h3>
 
+    <div id="login-box" style="display:none">
+        <div class="legend-box">登录后才能读取 Supabase 里的客户资料和 invoice 编号。</div>
+        <label for="lg-email">Email</label>
+        <input id="lg-email" type="email" autocomplete="username">
+        <label for="lg-pass">Password</label>
+        <input id="lg-pass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+        <button class="btn btn-main" type="button" onclick="doLogin()">登录</button>
+        <div id="login-status" class="status"></div>
+    </div>
+
     <div id="main-panel">
         <!-- 来自订单的资料 -->
         <div id="job-box" class="legend-box" style="display:none"></div>
@@ -378,13 +388,15 @@
     // 读完马上从网址上拿掉。这样工具不需要再登录。凭证大约一小时有效。
     const token = new URLSearchParams(location.hash.slice(1)).get('t');
     if (token) history.replaceState(null, '', location.pathname + location.search);
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, token ? {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-        global: token ? { headers: { Authorization: 'Bearer ' + token } } : {}
+        global: { headers: { Authorization: 'Bearer ' + token } }
+    } : {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
     });
 
     const jobId = new URLSearchParams(location.search).get('job');
-    const ctx = { job: null, existing: null, clients: [], tableOk: true, busy: false };
+    const ctx = { job: null, existing: null, clients: [], tableOk: true, busy: false, connected: false };
 
     // ================= 小工具 =================
     const $ = id => document.getElementById(id);
@@ -421,12 +433,41 @@
     window.onload = async function () {
         $('auto-date').innerText = todayText();
         $('items-body').innerHTML = '';
-        if (!token) { standalone(); calculateTotal(); return; }   // 没有凭证：不连数据库
+        // 改了日期 (月份) 就重新算下一个编号
+        $('auto-date').addEventListener('blur', () => { if (ctx.connected && !ctx.existing) peekNumber(); });
+        let signedIn = !!token;
+        if (!token) {
+            const { data } = await sb.auth.getSession();
+            signedIn = !!(data && data.session);
+        }
+        if (!signedIn) { standalone(); $('login-box').style.display = ''; calculateTotal(); return; }
+        await startConnected();
+    };
+
+    // 已登录 (从 app 打开，或在这里登录)：读客户资料和订单
+    async function startConnected() {
+        ctx.connected = true;
+        $('login-box').style.display = 'none';
+        $('save-btn').style.display = '';
+        $('auto-invoice-no').contentEditable = 'false';
+        $('auto-invoice-no').classList.remove('editable');
+        $('items-body').innerHTML = '';
         await loadClients();
         if (jobId) await loadJob();
-        else { standalone(true); }
+        else standalone(true);
         calculateTotal();
-    };
+    }
+
+    async function doLogin() {
+        const email = $('lg-email').value.trim(), password = $('lg-pass').value;
+        if (!email || !password) { setStatus('login-status', '请输入 Email 和 Password', '#c00'); return; }
+        setStatus('login-status', '⏳ 登录中...');
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) { setStatus('login-status', '❌ ' + error.message, '#c00'); return; }
+        $('lg-pass').value = '';
+        setStatus('login-status', '');
+        await startConnected();
+    }
 
     // 没有从 app 打开 (或没有订单)：只能手动填写和打印
     function standalone(connected) {
@@ -435,8 +476,8 @@
         box.style.display = '';
         box.innerHTML = connected
             ? '没有关联订单：只能打印，<b>不会占用 invoice 编号</b>。'
-            : '请从 app 的订单按 <b>Create invoice</b> 打开，才能自动带出客户资料和 invoice 编号。现在只能手动填写和打印。';
-        $('main-panel').querySelectorAll('.client-tools').forEach(el => el.style.display = 'none');
+            : '请先登录，才能从 Supabase 选客户、自动带出资料和 invoice 编号。不登录也可以手动填写和打印。';
+        $('main-panel').querySelectorAll('.client-tools').forEach(el => el.style.display = connected ? '' : 'none');
         $('auto-invoice-no').contentEditable = 'true';
         $('auto-invoice-no').classList.add('editable');
         blankBillTo();
