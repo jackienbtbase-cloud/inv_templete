@@ -512,10 +512,10 @@
         const idx = tbody.rows.length + 1;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td class="editable" contenteditable="true"${idx > 1 ? ' style="height: auto;"' : ''}>
+            <td onclick="if (!event.target.closest('.desc')) this.querySelector('.desc').focus()"${idx > 1 ? ' style="height: auto;"' : ''}>
                 <div style="display: flex;">
-                    <div style="width: 25px; font-weight: bold;">${idx}</div>
-                    <div>${descHtml}</div>
+                    <div contenteditable="false" style="width: 25px; flex-shrink: 0; user-select: none;">${idx}</div>
+                    <div class="editable desc" contenteditable="true" style="flex: 1; min-height: 1.4em;">${descHtml}</div>
                 </div>
             </td>
             <td class="editable text-right price" contenteditable="true" oninput="calculateTotal()">${esc(price)}</td>
@@ -581,7 +581,7 @@
     }
     function snapshot() {
         const items = [...document.querySelectorAll('#items-body tr')].map(tr => {
-            const d = tr.cells[0].querySelector('div > div:nth-child(2)');
+            const d = tr.cells[0].querySelector('.desc');
             return { desc: d ? d.innerHTML : '', price: tr.querySelector('.price').innerText.trim(), qty: tr.querySelector('.qty').innerText.trim() };
         });
         return { client_id: $('client-select').value || null, bill_to_html: $('bill-to-content').innerHTML,
