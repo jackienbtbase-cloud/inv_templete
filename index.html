@@ -253,28 +253,17 @@
 <div class="sidebar">
     <h3>⚙️ Invoice Control Panel</h3>
 
-    <!-- 登录 (只有 admin 能用) -->
-    <div id="login-box" style="display:none">
-        <div class="legend-box" style="border-left-color:#6f42c1">请用 admin 账号登录，才能读取订单和保存 invoice。</div>
-        <label for="login-email">Email</label>
-        <input type="email" id="login-email" autocomplete="email">
-        <label for="login-password">Password</label>
-        <input type="password" id="login-password" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()">
-        <button class="btn btn-save" type="button" onclick="doLogin()">登录</button>
-        <div id="login-status" class="status"></div>
-    </div>
-
-    <div id="main-panel" style="display:none">
-        <div id="who-line" class="who-line"></div>
-
+    <div id="main-panel">
         <!-- 来自订单的资料 -->
         <div id="job-box" class="legend-box" style="display:none"></div>
 
+        <div class="client-tools">
         <label for="client-select">📂 选择联系人 (Select Client):</label>
         <select id="client-select" onchange="loadClientData()"></select>
         <button class="btn btn-save" type="button" onclick="saveClient()">💾 保存当前客户为联系人</button>
         <button class="btn btn-del" type="button" onclick="deleteClient()">🗑️ 删除所选联系人</button>
         <button class="btn btn-add" type="button" id="import-btn" style="display:none" onclick="importLocalClients()"></button>
+        </div>
 
         <div class="controls">
             <button class="btn btn-add" onclick="addRow()">➕ 增加项目行 (Add Row)</button>
@@ -384,9 +373,15 @@
     // ================= 设定 =================
     const SUPABASE_URL = 'https://xxjqzsaqbyaskiqvplrb.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4anF6c2FxYnlhc2tpcXZwbHJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3MTY1MTksImV4cCI6MjEwODI5MjUxOX0.2B5IuAVjqCwBWJ_90JFVXKW_BLUv2Nwtiks_oOYYrq0';
-    const RT_ADMIN_EMAIL = 'testing@gmail.com';   // 要和主 app 的 app.js 里的 RT_ADMIN_EMAIL 一样
     const MARKUP = 1.21;                           // 单价 = transporter 成交价 x 1.21
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // 从 app 点 Create invoice 打开时，app 会把 admin 的登录凭证放在网址 # 后面带过来 (不会送到任何服务器)。
+    // 读完马上从网址上拿掉。这样工具不需要再登录。凭证大约一小时有效。
+    const token = new URLSearchParams(location.hash.slice(1)).get('t');
+    if (token) history.replaceState(null, '', location.pathname + location.search);
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+        global: token ? { headers: { Authorization: 'Bearer ' + token } } : {}
+    });
 
     const jobId = new URLSearchParams(location.search).get('job');
     const ctx = { job: null, existing: null, clients: [], tableOk: true, busy: false };
@@ -406,6 +401,8 @@
     function isMissingTable(err) {
         return !!err && (err.code === '42P01' || err.code === 'PGRST205' || err.code === 'PGRST202' || /does not exist|schema cache|Could not find/i.test(err.message || ''));
     }
+    const EXPIRED_HINT = '⚠️ 登录已过期（大约一小时有效）。请回到 app，重新按 Create invoice。';
+    function isAuthError(err) { return !!err && /JWT|expired|not allowed|permission denied|row-level security/i.test(err.message || ''); }
     const SETUP_HINT = '⚠️ 数据库还没设定好：请先在 Supabase 的 SQL Editor 运行 invoice_setup.sql';
 
     function todayText() {
@@ -420,58 +417,31 @@
         return `${m[3]}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}`;
     }
 
-    // ================= 启动 / 登录 =================
+    // ================= 启动 =================
     window.onload = async function () {
         $('auto-date').innerText = todayText();
-        let session = null;
-        try { session = (await sb.auth.getSession()).data.session; } catch (e) { console.error(e); }
-        if (session && session.user.email === RT_ADMIN_EMAIL) await onSignedIn(session.user);
-        else showLogin();
+        $('items-body').innerHTML = '';
+        if (!token) { standalone(); calculateTotal(); return; }   // 没有凭证：不连数据库
+        await loadClients();
+        if (jobId) await loadJob();
+        else { standalone(true); }
+        calculateTotal();
     };
 
-    function showLogin() {
-        $('login-box').style.display = '';
-        $('main-panel').style.display = 'none';
-    }
-
-    async function doLogin() {
-        const email = $('login-email').value.trim();
-        const password = $('login-password').value;
-        if (!email || !password) { setStatus('login-status', '请填写 Email 和 Password', '#c00'); return; }
-        setStatus('login-status', '⏳ 登录中...');
-        const { data, error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) { setStatus('login-status', '❌ 登录失败：' + error.message, '#c00'); return; }
-        if (data.user.email !== RT_ADMIN_EMAIL) {
-            await sb.auth.signOut();
-            setStatus('login-status', '❌ 这个账号不是 admin', '#c00');
-            return;
-        }
-        setStatus('login-status', '');
-        await onSignedIn(data.user);
-    }
-
-    async function doLogout() {
-        await sb.auth.signOut();
-        location.reload();
-    }
-
-    async function onSignedIn(user) {
-        $('login-box').style.display = 'none';
-        $('main-panel').style.display = '';
-        $('who-line').innerHTML = `已登录：${esc(user.email)} · <a href="#" onclick="doLogout();return false;">退出</a>`;
-
-        await loadClients();
-        $('items-body').innerHTML = '';
-        if (jobId) await loadJob();
-        else {
-            $('save-btn').style.display = 'none';
-            $('job-box').style.display = '';
-            $('job-box').innerHTML = '没有关联订单（直接打开工具）：只能打印，<b>不会占用 invoice 编号</b>。要保存到订单，请从 app 的订单按 <b>Create invoice</b> 打开。';
-            blankBillTo();
-            makeRow('', '', '');
-            await peekNumber();
-        }
-        calculateTotal();
+    // 没有从 app 打开 (或没有订单)：只能手动填写和打印
+    function standalone(connected) {
+        $('save-btn').style.display = 'none';
+        const box = $('job-box');
+        box.style.display = '';
+        box.innerHTML = connected
+            ? '没有关联订单：只能打印，<b>不会占用 invoice 编号</b>。'
+            : '请从 app 的订单按 <b>Create invoice</b> 打开，才能自动带出客户资料和 invoice 编号。现在只能手动填写和打印。';
+        $('main-panel').querySelectorAll('.client-tools').forEach(el => el.style.display = 'none');
+        $('auto-invoice-no').contentEditable = 'true';
+        $('auto-invoice-no').classList.add('editable');
+        blankBillTo();
+        makeRow('', '', '1 TRIP');
+        if (connected) peekNumber();
     }
 
     // ================= 订单资料 =================
@@ -485,11 +455,11 @@
             .eq('id', jobId).maybeSingle();
         if (error || !job) {
             console.error(error);
-            jobBox.innerHTML = '❌ 找不到这个订单' + (error ? '：' + esc(error.message) : '') + '。可以先手动填写。';
+            jobBox.innerHTML = isAuthError(error) ? EXPIRED_HINT : '❌ 找不到这个订单' + (error ? '：' + esc(error.message) : '') + '。可以先手动填写。';
             $('save-btn').style.display = 'none';
             blankBillTo();
-            makeRow('', '', '');
-            await peekNumber();
+            makeRow('', '', '1 TRIP');
+            if (!isAuthError(error)) await peekNumber();
             return;
         }
         ctx.job = job;
@@ -586,6 +556,7 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
             console.error(error);
             ctx.clients = [];
             if (isMissingTable(error)) { ctx.tableOk = false; setStatus('save-status', SETUP_HINT, '#c00'); }
+            else if (isAuthError(error)) { ctx.tableOk = false; setStatus('save-status', EXPIRED_HINT, '#c00'); }
         } else ctx.clients = data || [];
         refreshClientSelect();
     }
@@ -815,7 +786,7 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
                 p_job_id: String(ctx.job.id), p_client_name: currentClientName(), p_po_no: snap.po_no,
                 p_invoice_date: iso, p_total: total, p_snapshot: snap
             });
-            if (e1) throw new Error(isMissingTable(e1) ? SETUP_HINT : e1.message);
+            if (e1) throw new Error(isMissingTable(e1) ? SETUP_HINT : (isAuthError(e1) ? EXPIRED_HINT : e1.message));
             $('auto-invoice-no').innerText = no;
 
             // 2. 做 PDF
@@ -826,7 +797,7 @@ No. 37G, Jalan PJS 5/30, Pusat Dagangan Petaling Jaya Selatan (PJCC),<br>
             setStatus('save-status', '⏳ 3/4 正在上传...');
             const path = `public/inv-${Date.now()}-${Math.random().toString(36).substring(2)}.pdf`;
             const up = await sb.storage.from('job-photos').upload(path, blob, { contentType: 'application/pdf' });
-            if (up.error) throw new Error('上传失败：' + up.error.message + '（编号 ' + no + ' 已保留，再按一次保存即可）');
+            if (up.error) throw new Error((isAuthError(up.error) ? EXPIRED_HINT + ' ' : '') + '上传失败：' + up.error.message + '（编号 ' + no + ' 已保留，再按一次保存即可）');
             const url = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
 
             // 4. 放进订单 (customer 马上就能下载)
